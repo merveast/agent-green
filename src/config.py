@@ -1,17 +1,12 @@
 
 # Directory paths
-PROJECT_ROOT = '/home/user/Desktop/agent-green'
+#PROJECT_ROOT = '/home/user/Desktop/agent-green'
+PROJECT_ROOT = '/Users/merveastekin/Desktop/Agent Green/agent-green'
 LOG_DIR = f'{PROJECT_ROOT}/logs'
 DATA_DIR = f'{PROJECT_ROOT}/data'
 WORK_DIR = f'{PROJECT_ROOT}/tests/work_dir'
 RESULT_DIR = f'{PROJECT_ROOT}/results'
 PLOT_DIR = f'{PROJECT_ROOT}/plots'
-
-
-VULN_DATASET = f"{PROJECT_ROOT}/vuln_database/VulTrial_386_samples_balanced.jsonl"
-HUMANEVAL_DATASET = f"{PROJECT_ROOT}/vuln_database/HumanEval.jsonl"
-
-
 
 # Model/LLM settings
 LLM_SERVICE = "ollama"
@@ -35,6 +30,11 @@ LLM_CONFIG = {
 
 
 TASK_PROMPT = """Look at the following log message and print the template corresponding to the log message:\n"""
+
+
+TASK_PROMPT_LOG_PARSING = """Look at the following log message and print the template corresponding to the log message:\n"""
+
+
 SYS_MSG_SINGLE_LOG_PARSER_FEW_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
         The log texts describe various system events in a software system.
@@ -146,7 +146,7 @@ SYS_MSG_LOG_PARSER_ZERO_SHOT = """
         Print only the input log's template.
         """
 
-SYS_MSG_CRITIC_FEW_SHOT = """
+SYS_MSG_LOG_PARSER_CRITIC_FEW_SHOT = """
                 You are a critic reviewing the work of the log_parser_agent.
                 Your task is to provide constructive feedback to improve the correctness of the extracted log template. 
                 The template should abstract all dynamic variables in the log message, replacing them with appropriate placeholders enclosed in angle brackets (<*>).
@@ -161,7 +161,7 @@ SYS_MSG_CRITIC_FEW_SHOT = """
                 Receiving block <*> src: <*>:<*> dest: <*>:<*>
                 """
 
-SYS_MSG_CRITIC_ZERO_SHOT = """
+SYS_MSG_LOG_PARSER_CRITIC_ZERO_SHOT = """
                 You are a critic reviewing the work of the log_parser_agent.
                 Your task is to provide constructive feedback to improve the correctness of the extracted log template. 
                 The template should abstract all dynamic variables in the log message, replacing them with appropriate placeholders enclosed in angle brackets (<*>).
@@ -169,7 +169,7 @@ SYS_MSG_CRITIC_ZERO_SHOT = """
                 If the template is correct, do not provide any suggestions, and do not even print the correct template again.
                 """
 
-SYS_MSG_COMPARATOR_REFINER_FEW_SHOT = """
+SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_FEW_SHOT = """
         You are a comparator and refiner. You receive a log message and two extracted templates:
         one from the log_parser_agent, one from the code_executor_agent.
         
@@ -191,7 +191,7 @@ SYS_MSG_COMPARATOR_REFINER_FEW_SHOT = """
         Receiving block <*> src: <*>:<*> dest: <*>:<*>
         """
 
-SYS_MSG_COMPARATOR_REFINER_ZERO_SHOT = """
+SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_ZERO_SHOT = """
         You are a comparator and refiner. You receive a log message and two extracted templates:
         one from the log_parser_agent, one from the code_executor_agent.
         
@@ -206,12 +206,212 @@ SYS_MSG_COMPARATOR_REFINER_ZERO_SHOT = """
         If both templates are wrong, attempt to correct and return a valid one.
         """
 
+TASK_PROMPT_TD_DETECTION = """Look at the following code snippet and determine whether it contains a code smell:\n"""
+
+SYS_MSG_SINGLE_TD_DETECTION_GENERATOR_FEW_SHOT ="""
+        You are a software quality expert. Your task is to identify code smells in Java code snippets.
+        Code smells indicate potential maintainability or design problems:
+        0 = No smell: Code is clean and well-structured
+        1 = Blob: A class with many responsibilities, often large and unfocused.
+        2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+        3 = Feature Envy: A method that heavily depends on another class's data.
+        4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
+
+        You will be shown a code snippet. Respond with a single digit according to the labels above.
+        Respond with a single digit only. Do not provide any explanations or additional text.
+
+        Here are a few examples of code snipets and the types of code smells they contain:
+        Example of Data Class (2):
+        class ClientRecord {
+            private String id;
+            private String contact;
+            private boolean active;
+            public ClientRecord(String id, String contact, boolean active) {
+                this.id = id;
+                this.contact = contact;
+                this.active = active;
+            }
+            public String getId() { return id; }
+            public void setId(String id) { this.id = id; }
+            public String getContact() { return contact; }
+            public void setContact(String contact) { this.contact = contact; }
+            public boolean isActive() { return active; }
+            public void setActive(boolean active) { this.active = active; }
+        }
+
+        Example of Feature Envy (3):
+        public class ReportPrinter {
+        class Invoice {
+            private Customer customer;
+            public String compileCustomerSummary() {
+                String s = customer.getFullName() + " (" + customer.getEmail() + ")\n";
+                int recent = 0;
+                for (Order o : customer.getOrders()) {
+                    if (o.getDate().after(someCutoff())) recent++;
+                    s += "Order: " + o.getId() + " amount=" + o.getAmount() + "\n";
+                }
+                s += "Recent orders: " + recent + "\n";
+                return s;
+            }
+        }
+
+        Example of Long Method (4):
+        class ReportBuilder {
+            void buildReport(List<String> rows) {
+                StringBuilder sb = new StringBuilder();
+                for (String r : rows) {
+                    if (r == null || r.isEmpty()) {
+                        sb.append("EMPTY\n");
+                        continue;
+                    }
+                    sb.append("Row: ").append(r).append("\n");
+                    for (int i = 0; i < 3; i++) {
+                        sb.append("Processing pass ").append(i).append(" for ").append(r).append("\n");
+                    }
+                }
+                // aggregation and final formatting
+                int total = rows.size();
+                sb.append("Total: ").append(total).append("\n");
+                System.out.println(sb.toString());
+            }
+        }
+        """
+SYS_MSG_SINGLE_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
+        You are a software quality expert. Your task is to identify code smells in Java code snippets.
+        Code smells indicate potential maintainability or design problems:
+        0 = No smell: Code is clean and well-structured
+        1 = Blob: A class with many responsibilities, often large and unfocused.
+        2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+        3 = Feature Envy: A method that heavily depends on another class's data.
+        4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
+
+        You will be shown a code snippet. Respond with a single digit according to the labels above.
+        Respond with a single digit only. Do not provide any explanations or additional text.
+        """
 
 
-# ========================================================================================
-# VULNERABILITY DETECTION
-# ========================================================================================
+SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
+        You are a software quality critic/verifier. You will be shown:
+        1) A Java code snippet
+        2) A proposed label produced by the generator_agent (a single digit 0-4)
 
+        Labels:
+        0 = No smell: Code is clean and well-structured
+        1 = Blob: A class with many responsibilities, often large and unfocused.
+        2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+        3 = Feature Envy: A method that heavily depends on another class's data.
+        4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
+
+        Task:
+        - Carefully review the code snippet and the generator's proposed label.
+        - If the proposed label is correct, respond with exactly:
+                APPROVED|<correct_digit>|
+            (nothing else, single token, uppercase).
+        - If the proposed label is incorrect, respond with exactly one single-line string in this format:
+                REJECTED|<correct_digit>|<brief_reason>
+            where:
+            * <correct_digit> is the correct label (0-4).
+            * <brief_reason> is a concise 1-2 short-sentence justification (max ~25 words) that explains the primary evidence for the correction.
+            Use '|' (pipe) as separators and do not include any other characters, lines, or commentary.
+
+        Examples of valid critic outputs:
+        APPROVED|2|
+        REJECTED|2|Class only has fields and trivial getters/setters, no behavior.
+
+        Constraints:
+        - Do not output anything other than the exact allowed formats above.
+        - Keep the brief_reason factual, focused, and short (one or two clauses).
+        """
+
+SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
+        You are a software quality critic/verifier. You will be shown:
+        1) A Java code snippet
+        2) A proposed label produced by the generator_agent (a single digit 0-4)
+
+        Labels:
+        0 = No smell: Code is clean and well-structured
+        1 = Blob: A class with many responsibilities, often large and unfocused.
+        2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+        3 = Feature Envy: A method that heavily depends on another class's data.
+        4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
+
+        Task:
+        - Carefully review the code snippet and the generator's proposed label.
+        - If the proposed label is correct, respond with exactly:
+                APPROVED|<correct_digit>|
+            (nothing else, single token, uppercase).
+        - If the proposed label is incorrect, respond with exactly one single-line string in this format:
+                REJECTED|<correct_digit>|<brief_reason>
+            where:
+            * <correct_digit> is the correct label (0-4).
+            * <brief_reason> is a concise 1-2 short-sentence justification (max ~25 words) that explains the primary evidence for the correction.
+            Use '|' (pipe) as separators and do not include any other characters, lines, or commentary.
+
+        Examples of valid critic outputs:
+        APPROVED|2|
+        REJECTED|2|Class only has fields and trivial getters/setters, no behavior.
+
+        Constraints:
+        - Do not output anything other than the exact allowed formats above.
+        - Keep the brief_reason factual, focused, and short (one or two clauses).
+
+        Here are a few examples of code snipets and the types of code smells they contain:
+        Example of Data Class (2):
+        class ClientRecord {
+            private String id;
+            private String contact;
+            private boolean active;
+            public ClientRecord(String id, String contact, boolean active) {
+                this.id = id;
+                this.contact = contact;
+                this.active = active;
+            }
+            public String getId() { return id; }
+            public void setId(String id) { this.id = id; }
+            public String getContact() { return contact; }
+            public void setContact(String contact) { this.contact = contact; }
+            public boolean isActive() { return active; }
+            public void setActive(boolean active) { this.active = active; }
+        }
+
+        Example of Feature Envy (3):
+        public class ReportPrinter {
+        class Invoice {
+            private Customer customer;
+            public String compileCustomerSummary() {
+                String s = customer.getFullName() + " (" + customer.getEmail() + ")\n";
+                int recent = 0;
+                for (Order o : customer.getOrders()) {
+                    if (o.getDate().after(someCutoff())) recent++;
+                    s += "Order: " + o.getId() + " amount=" + o.getAmount() + "\n";
+                }
+                s += "Recent orders: " + recent + "\n";
+                return s;
+            }
+        }
+
+        Example of Long Method (4):
+        class ReportBuilder {
+            void buildReport(List<String> rows) {
+                StringBuilder sb = new StringBuilder();
+                for (String r : rows) {
+                    if (r == null || r.isEmpty()) {
+                        sb.append("EMPTY\n");
+                        continue;
+                    }
+                    sb.append("Row: ").append(r).append("\n");
+                    for (int i = 0; i < 3; i++) {
+                        sb.append("Processing pass ").append(i).append(" for ").append(r).append("\n");
+                    }
+                }
+                // aggregation and final formatting
+                int total = rows.size();
+                sb.append("Total: ").append(total).append("\n");
+                System.out.println(sb.toString());
+            }
+        }
+
+        """
 
 # ========================================================================================
 # Single-agent VULNERABILITY DETECTION
