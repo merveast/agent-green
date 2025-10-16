@@ -3,7 +3,7 @@ import time
 import config
 from datetime import datetime
 import ollama
-from codecarbon import EmissionsTracker
+from codecarbon import OfflineEmissionsTracker
 from log_utils import save_templates
 from ollama_utils import start_ollama_server, stop_ollama_server
 from vuln_evaluation import evaluate_and_save_vulnerability, normalize_vulnerability_basic, normalize_vulnerability_conservative, normalize_vulnerability_strict
@@ -23,7 +23,7 @@ if not os.path.exists(RESULT_DIR):
 # Use vulnerability dataset from config
 DATASET_FILE = config.VULN_DATASET
 
-DESIGN = "NA-zero-vuln"  # Change to "NA-few-vuln" for few-shot
+DESIGN = "no-agent_vuln"  # Change to "NA-few-vuln" for few-shot
 model_name = llm_config["config_list"][0]["model"]
 model = llm_config["config_list"][0]["model"].replace(":", "-")
 temperature = llm_config["temperature"]
@@ -74,9 +74,15 @@ def run_vulnerability_detection_with_emissions(vuln_data, model_name, prompt_pre
     # Create JSON results file
     json_results_file = os.path.join(result_dir, f"{exp_name}_results.json")
     
-    tracker = EmissionsTracker(project_name=exp_name, output_dir=result_dir, save_to_file=True)
+    # tracker = EmissionsTracker(project_name=exp_name, output_dir=result_dir, save_to_file=True)
+    # tracker.start()
+    tracker = OfflineEmissionsTracker(
+        project_name=exp_name,
+        output_dir=result_dir,
+        country_iso_code="CAN",
+        save_to_file=True
+    )
     tracker.start()
-    
     try:
         for i, vuln_item in enumerate(vuln_data):
             print(f"Processing vulnerability detection for item {i+1}/{len(vuln_data)}")
