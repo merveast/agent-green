@@ -207,8 +207,12 @@ def run_dual_agent_inference_with_emissions(samples, llm_config, exp_name, resul
             # Code author revises based on feedback
             revision = user_proxy.initiate_chat(
                 recipient=code_author,
+                # message=config.DUAL_AGENT_TASK_CODE_REVISION.format(
+                #     original_code=sample['func'],
+                #     feedback=feedback
+                # ),
                 message=config.DUAL_AGENT_TASK_CODE_REVISION.format(
-                    original_code=sample['func'],
+                    initial_code=sample['func'],  # Use initial_code instead
                     feedback=feedback
                 ),
                 max_turns=1,
