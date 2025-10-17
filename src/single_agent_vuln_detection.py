@@ -2,12 +2,17 @@ import os
 import json
 import time
 import config
+import argparse  # Add this import for command line arguments
 from datetime import datetime
 from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
-#from codecarbon import EmissionsTracker
 from vuln_evaluation import evaluate_and_save_vulnerability
-import sys
+
+# --- Parse Command Line Arguments ---
+parser = argparse.ArgumentParser(description='Run vulnerability detection with specified design')
+parser.add_argument('--design', type=str, choices=['SA-few', 'SA-zero'], default='SA-few', 
+                    help='Design approach for vulnerability detection (SA-few or SA-zero)')
+args = parser.parse_args()
 
 # --- Configuration ---
 llm_config = config.LLM_CONFIG
@@ -24,27 +29,13 @@ DATASET_FILE = config.VULN_DATASET
 RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-# change this for different designs: "SA-few" or "SA-zero"
-#DESIGN = "SA-zero" #"SA-few"  # Change to "SA-zero" to test zero-shot approach
 
-if len(sys.argv) > 1:
-    DESIGN = sys.argv[1]
-    if DESIGN not in ["SA-zero", "SA-few"]:
-        print(f"Error: Invalid design '{DESIGN}'. Must be 'SA-zero' or 'SA-few'")
-        sys.exit(1)
-else:
-    print("Usage: python script.py <design>")
-    print("design: SA-zero or SA-few")
-    sys.exit(1)
-
-print(f"Running with design: {DESIGN}")
-
-
+DESIGN = args.design  # Get design from command line arguments
 model = llm_config["config_list"][0]["model"].replace(":", "-")
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 project_name = DESIGN.capitalize()
 exp_name = f"{project_name}_{model}_{timestamp}"
-input_dataset_file = "VulTrial_386_samples_balanced.jsonl"  # Example dataset file name
+input_dataset_file = "VulTrial_385_samples.jsonl"
 
 # --- Agent Creation ---
 def create_vulnerability_detector_agent(llm_config, sys_prompt):
@@ -372,15 +363,15 @@ language_distribution = analyze_dataset_languages(code_samples)
 # --- Main Execution (following original pattern) ---
 def main():
     # Start ollama server if needed (from original script)
-    #try:
-        #from ollama_utils import start_ollama_server, stop_ollama_server
-        #proc = start_ollama_server()
-        #time.sleep(5)  # Give it some time to initialize
-        #ollama_started = True
-    #except ImportError:
-    #    print("Ollama utils not available, proceeding without local server management")
-    #    proc = None
-    #    ollama_started = False
+    try:
+        from ollama_utils import start_ollama_server, stop_ollama_server
+        proc = start_ollama_server()
+        time.sleep(5)  # Give it some time to initialize
+        ollama_started = True
+    except ImportError:
+        print("Ollama utils not available, proceeding without local server management")
+        proc = None
+        ollama_started = False
     
     try:
         # Select system prompt based on design (following original pattern)
@@ -439,11 +430,10 @@ def main():
         print("Vulnerability detection completed successfully!")
         
     finally:
-    #     # Stop ollama server if we started it (following original pattern)
-    #     if ollama_started and proc:
-    #         from ollama_utils import stop_ollama_server
-    #         stop_ollama_server(proc)
-            print("Ollama server doesn't need to stop as this is not started here.")
+        # Stop ollama server if we started it (following original pattern)
+        if ollama_started and proc:
+            from ollama_utils import stop_ollama_server
+            stop_ollama_server(proc)
 
 if __name__ == "__main__":
     main()
