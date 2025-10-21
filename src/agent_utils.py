@@ -1,7 +1,8 @@
 import os
 import config
 from pathlib import Path
-from autogen import AssistantAgent, ConversableAgent, GroupChat, GroupChatManager, LocalCommandLineCodeExecutor, register_function
+from autogen import AssistantAgent, ConversableAgent, GroupChat, GroupChatManager, register_function
+from autogen.coding import LocalCommandLineCodeExecutor
 
 # --- Generic Agent Creation ---
 def create_agent(agent_type, name, llm_config=None, sys_prompt=None, description=None):

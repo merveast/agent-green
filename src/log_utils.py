@@ -122,6 +122,10 @@ def normalize_template(text: str) -> str:
     ]
     for pattern in explanation_patterns:
         text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
+
+    # Keep only the part before any explanatory "Note:" or similar
+    text = re.split(r"\bNote:|This template|Thus,|Therefore,|The template reflects", text, maxsplit=1, flags=re.IGNORECASE)[0]
+
     return _clean_text(text)
 
 def normalize_template_v1(text: str) -> str:
@@ -220,6 +224,7 @@ def extract_last_template_from_history(history: List[Dict[str, Any]], agent_name
         if msg['name'] == agent_name and TEMPLATE_PATTERN.search(msg['content'].strip()):
             return msg['content'].strip()
     return None
+
 
 def extract_last_template_from_history_loose(history: List[Dict[str, Any]], agent_name: str = 'log_parser_agent') -> Optional[str]:
     """Extract last non-empty message from agent history."""

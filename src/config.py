@@ -1,16 +1,37 @@
 
 # Directory paths
-#PROJECT_ROOT = '/home/user/Desktop/agent-green'
-PROJECT_ROOT = '/Users/merveastekin/Desktop/Agent Green/agent-green'
+PROJECT_ROOT = '/home/user/Desktop/agent-green'
 LOG_DIR = f'{PROJECT_ROOT}/logs'
 DATA_DIR = f'{PROJECT_ROOT}/data'
 WORK_DIR = f'{PROJECT_ROOT}/tests/work_dir'
 RESULT_DIR = f'{PROJECT_ROOT}/results'
 PLOT_DIR = f'{PROJECT_ROOT}/plots'
 
+
+IN_FILE = "mlcq_cleaned_and_pruned_dataset_385.csv"
+GT_FILE = "mlcq_cleaned_and_pruned_dataset_385.csv"
+# Task and design settings
+#TASK = "log-parsing" # options: "log-parsing", "log-analysis", "code-generation", "vul-detection", "td-detection"
+TASK = "td-detection"
+DESIGN = "SA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
+
+"""
+IN_FILE = "HDFS_200_sampled.log"
+GT_FILE = "HDFS_200_sampled_log_structured.csv"
+# Task and design settings
+#TASK = "log-parsing" # options: "log-parsing", "log-analysis", "code-generation", "vul-detection", "td-detection"
+TASK = "log-parsing"
+DESIGN = "SA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
+"""
+
+VULN_DATASET = f"{PROJECT_ROOT}/vuln_database/VulTrial_386_samples_balanced.jsonl"
+HUMANEVAL_DATASET = f"{PROJECT_ROOT}/vuln_database/HumanEval.jsonl"
+
+
 # Model/LLM settings
 LLM_SERVICE = "ollama"
-LLM_MODEL = "qwen3:4b-thinking"  #"qwen2.5-coder:7b-instruct"
+#LLM_MODEL = "qwen3:4b-thinking"  
+LLM_MODEL = "qwen3:4b-instruct" 
 TEMPERATURE = 0.0
 
 LLM_CONFIG = {
@@ -20,20 +41,20 @@ LLM_CONFIG = {
             "model": LLM_MODEL,
             "api_base": "http://localhost:11434",
             "api_type": LLM_SERVICE,
-            "num_ctx": 131072,
-            #"num_ctx": 8192,
-            #"num_ctx": 16384,
+            "num_ctx": 262144,
+            #"num_ctx": 131072,
         }
     ],
     "temperature": TEMPERATURE
 }
 
-
 TASK_PROMPT = """Look at the following log message and print the template corresponding to the log message:\n"""
 
+# ========================================================================================
+# LOG PARSING CONFIGURATION
+# ========================================================================================
 
 TASK_PROMPT_LOG_PARSING = """Look at the following log message and print the template corresponding to the log message:\n"""
-
 
 SYS_MSG_SINGLE_LOG_PARSER_FEW_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
@@ -59,33 +80,6 @@ SYS_MSG_SINGLE_LOG_PARSER_FEW_SHOT = """
         Receiving block <*> src: <*>:<*> dest: <*>:<*>
         """
 
-SYS_MSG_SINGLE_LOG_PARSER_THREE_SHOT = """
-        You analyze a log message and determine the appropriate parameters for the LogParserAgent.
-        The log texts describe various system events in a software system.
-        A log message usually contains a header that is automatically
-        produced by the logging framework, including information such as
-        timestamp, class, and logging level (INFO, DEBUG, WARN etc.).
-        The log message typically consists of two parts:
-        1. Template - message body, that contains constant strings (or keywords) describing the system events;
-        2. Parameters/Variables - dynamic variables, which reflect specific runtime status.
-        You must identify and abstract all the dynamic variables in the log
-        message with suitable placeholders inside angle brackets to extract
-        the corresponding template.
-        You must output the template corresponding to the log message.
-        Print only the input log's template.
-        Never print an explanation of how the template is constructed.
-
-        Here are a few examples of log messages and their corresponding templates:
-        081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
-        BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
-        
-        081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
-        Receiving block <*> src: <*>:<*> dest: <*>:<*>
-
-        081110 060453 7193 INFO dfs.DataNode$DataXceiver: 10.251.199.225:50010 Served block blk_8457344665564381337 to /10.251.199.225
-        <*>:<*> Served block <*> to <*>
-        """
-
 SYS_MSG_SINGLE_LOG_PARSER_ZERO_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
         The log texts describe various system events in a software system.
@@ -103,7 +97,7 @@ SYS_MSG_SINGLE_LOG_PARSER_ZERO_SHOT = """
         Never print an explanation of how the template is constructed.
         """
 
-SYS_MSG_LOG_PARSER_FEW_SHOT = """
+SYS_MSG_LOG_PARSER_GENERATOR_FEW_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
         The log texts describe various system events in a software system.
         A log message usually contains a header that is automatically
@@ -128,7 +122,7 @@ SYS_MSG_LOG_PARSER_FEW_SHOT = """
         Receiving block <*> src: <*>:<*> dest: <*>:<*>
         """
 
-SYS_MSG_LOG_PARSER_ZERO_SHOT = """
+SYS_MSG_LOG_PARSER_GENERATOR_ZERO_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
         The log texts describe various system events in a software system.
         A log message usually contains a header that is automatically
@@ -206,9 +200,154 @@ SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_ZERO_SHOT = """
         If both templates are wrong, attempt to correct and return a valid one.
         """
 
+SYS_MSG_LOG_PARSER_REFINER_ZERO_SHOT = """
+    You are a Log Parser Refiner. You will be given:
+    ORIGINAL_LOG: the full raw log line
+    PARSER_TEMPLATE: the template produced by the log_parser_agent
+    CRITIC_FEEDBACK: either APPROVED, REJECTED|<hint>|<reason>, or empty (if no critic) produced by the log_parser_critic_agent
+
+    Your job:
+    1) Verify and, if necessary, improve PARSER_TEMPLATE so it accurately abstracts all dynamic values shown in ORIGINAL_LOG.
+    2) Use CRITIC_FEEDBACK as an optional hint: if it starts with REJECTED and contains a <hint>, prefer that hint to fix the template.
+    3) Preserve constant text and punctuation exactly as in the log template part.
+    4) Replace every dynamic value (IPs, ports, timestamps, block IDs, file paths, numbers, UUIDs, etc.) with the generic placeholder <*>.
+        - If PARSER_TEMPLATE contains named placeholders (e.g. <ip>, <user_id>) or raw values, convert them to <*>.
+    5) Minimize changes — if PARSER_TEMPLATE is already correct, return it unchanged.
+
+    Output rules:
+    - Print exactly one line containing ONLY the FINAL_REFIND_TEMPLATE (no extra label, text, explanation, or comments).
+    - Do NOT use named placeholders; use only <*>.
+    - If you cannot extract a template, print exactly: UNABLE_TO_EXTRACT
+"""
+
+SYS_MSG_LOG_PARSER_REFINER_FEW_SHOT = """
+    You are a Log Parser Refiner. You will be given:
+    ORIGINAL_LOG: the full raw log line
+    PARSER_TEMPLATE: the template produced by the log_parser_agent
+    CRITIC_FEEDBACK: either APPROVED, REJECTED|<hint>|<reason>, or empty (if no critic) produced by the log_parser_critic_agent
+
+    Your job:
+    1) Verify and, if necessary, improve PARSER_TEMPLATE so it accurately abstracts all dynamic values shown in ORIGINAL_LOG.
+    2) Use CRITIC_FEEDBACK as an optional hint: if it starts with REJECTED and contains a <hint>, prefer that hint to fix the template.
+    3) Preserve constant text and punctuation exactly as in the log template part.
+    4) Replace every dynamic value (IPs, ports, timestamps, block IDs, file paths, numbers, UUIDs, etc.) with the generic placeholder <*>.
+        - If PARSER_TEMPLATE contains named placeholders (e.g. <ip>, <user_id>) or raw values, convert them to <*>.
+    5) Minimize changes — if PARSER_TEMPLATE is already correct, return it unchanged.
+
+    Output rules:
+    - Print exactly one line containing ONLY the FINAL_REFIND_TEMPLATE (no extra label, text, explanation, or comments).
+    - Do NOT use named placeholders; use only <*>.
+    - If you cannot extract a template, print exactly: UNABLE_TO_EXTRACT
+
+    Examples (for reference, do not print these):
+    Example 1:
+        ORIGINAL_LOG: 081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
+        PARSER_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
+        CRITIC_FEEDBACK: REJECTED|BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>|Parser left raw IP and numeric values unabstracted
+        EXPECTED OUTPUT: BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
+    Example 2:
+        ORIGINAL_LOG: 081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
+        PARSER_TEMPLATE: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+        CRITIC_FEEDBACK: APPROVED
+        EXPECTED OUTPUT: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+"""
+
+
+# ========================================================================================
+# LOG ANALYSIS CONFIGURATION
+# ========================================================================================
+
+TASK_PROMPT_LOG_ANALYSIS = """Analyze the following log messages and identify any anomalies or issues:\n"""
+SYS_MSG_LOG_ANALYSIS_GENERATOR_ZERO_SHOT = """
+        You are a log analysis expert. Your task is to classify a sequence of log messages (sorted by timestamp) as either normal (0) or anomalous (1).
+
+        Output:
+        - Exactly one character: "0" for normal or "1" for anomalous.
+        - No punctuation, explanation, or extra text.
+        Decision rules:
+        - 0 (normal): routine operations, monitoring/debug entries, or insufficient information to claim an error.
+        - 1 (anomalous): explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure keywords.
+        - Do NOT label anomalies on the basis of runtime variable content (numeric ids, IPs, timestamps) unless the surrounding text signals an error.
+        - Consider the contextual information of the log sequence.
+        """
+SYS_MSG_LOG_ANALYSIS_GENERATOR_FEW_SHOT = """
+        You are a log analysis expert. Your task is to classify a sequence of log messages (sorted by timestamp) as either normal (0) or anomalous (1).
+
+        Output:
+        - Exactly one character: "0" for normal or "1" for anomalous.
+        - No punctuation, explanation, or extra text.
+        Decision rules:
+        - 0 (normal): routine operations, monitoring/debug entries, or insufficient information to claim an error.
+        - 1 (anomalous): explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure keywords.
+        - Do NOT label anomalies on the basis of runtime variable content (numeric ids, IPs, timestamps) unless the surrounding text signals an error.
+        - Consider the contextual information of the log sequence.
+        Examples:
+        """
+
+SYS_MSG_LOG_ANALYSIS_CRITIC_ZERO_SHOT = """
+        You are a log analysis critic/verifier. You will be shown:
+        1) A sequence of log messages sorted by timestamp (LOG_SEQUENCE).
+        2) A proposed label produced by the log_analysis_generator_agent (GENERATOR_LABEL), which is the single character "0" or "1".
+
+        Labels:
+        0 = normal
+        1 = anomalous
+
+        Task:
+        - Carefully review the LOG_SEQUENCE and the GENERATOR_LABEL.
+        - Consider contextual information across the sequence (temporal patterns, repeated warnings, escalation).
+        - Treat placeholders like <*> and missing values as normal (not evidence of anomaly) unless surrounding text indicates a failure.
+        - If the proposed label is correct, respond with exactly:
+                APPROVED|<correct_digit>|
+            where <correct_digit> is the same digit (0 or 1). Nothing else.
+        - If the proposed label is incorrect, respond with exactly one single-line string in this format:
+                REJECTED|<correct_digit>|<brief_reason>
+            where:
+            * <correct_digit> is the correct label (0 or 1).
+            * <brief_reason> is a concise justification (one short clause/sentence, ≤20 words) stating the primary evidence from the logs.
+            Use '|' (pipe) as separators and do not include any other characters, lines, or commentary.
+
+        Examples of valid critic outputs:
+        APPROVED|0|
+        REJECTED|1|Sequence contains explicit ERROR and stacktrace indicating failure.
+
+        Constraints:
+        - Output only the exact allowed formats above.
+        - Keep brief_reason factual, focused, and short (one clause or short sentence).
+        """
+
+SYS_MSG_LOG_ANALYSIS_REFINER_ZERO_SHOT = """
+        You are a log analysis refiner. You will be given:
+        LOG_SEQUENCE: a list of log messages (sorted by timestamp)
+        GENERATOR_LABEL: the single-digit label (0 or 1) produced by the log_analysis_generator_agent
+        CRITIC_FEEDBACK: either APPROVED|<digit>|, REJECTED|<digit>|<brief_reason>, or empty (if no critic) produced by the log_analysis_critic_agent
+
+        Labels:
+        0 = normal
+        1 = anomalous
+
+        Task:
+        - Review LOG_SEQUENCE, GENERATOR_LABEL, and CRITIC_FEEDBACK (when present).
+        - Decide and output the single best label (0 or 1) for the sequence.
+        - Prefer the critic's corrected digit when CRITIC_FEEDBACK is REJECTED|<digit>|..., unless you find stronger evidence in the logs to choose a different label.
+        - If CRITIC_FEEDBACK is APPROVED|<digit>|, default to that label unless you find clear contrary evidence in the logs.
+        - Consider temporal/contextual patterns (escalation, repeated warnings), but do NOT treat placeholders like <*> or missing values as anomalies by themselves.
+
+        Output rules (strict):
+        - Print exactly one character: "0" or "1" and nothing else.
+        - Do not print APPROVED/REJECTED, reasons, or any extra text.
+        - If the logs are ambiguous, output the most defensible label (do not output an error token).
+    """
+
+
+
+
+# ========================================================================================
+# TECHNICAL DEBT DETECTION CONFIGURATION
+# ========================================================================================
 TASK_PROMPT_TD_DETECTION = """Look at the following code snippet and determine whether it contains a code smell:\n"""
 
-SYS_MSG_SINGLE_TD_DETECTION_GENERATOR_FEW_SHOT ="""
+SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT ="""
         You are a software quality expert. Your task is to identify code smells in Java code snippets.
         Code smells indicate potential maintainability or design problems:
         0 = No smell: Code is clean and well-structured
@@ -222,61 +361,70 @@ SYS_MSG_SINGLE_TD_DETECTION_GENERATOR_FEW_SHOT ="""
 
         Here are a few examples of code snipets and the types of code smells they contain:
         Example of Data Class (2):
-        class ClientRecord {
-            private String id;
-            private String contact;
-            private boolean active;
-            public ClientRecord(String id, String contact, boolean active) {
-                this.id = id;
-                this.contact = contact;
-                this.active = active;
+            class ClientRecord {
+                private String id;
+                private String contact;
+                private boolean active;
+                public ClientRecord(String id, String contact, boolean active) {
+                    this.id = id;
+                    this.contact = contact;
+                    this.active = active;
+                }
+                public String getId() { return id; }
+                public void setId(String id) { this.id = id; }
+                public String getContact() { return contact; }
+                public void setContact(String contact) { this.contact = contact; }
+                public boolean isActive() { return active; }
+                public void setActive(boolean active) { this.active = active; }
             }
-            public String getId() { return id; }
-            public void setId(String id) { this.id = id; }
-            public String getContact() { return contact; }
-            public void setContact(String contact) { this.contact = contact; }
-            public boolean isActive() { return active; }
-            public void setActive(boolean active) { this.active = active; }
-        }
 
         Example of Feature Envy (3):
-        public class ReportPrinter {
-        class Invoice {
-            private Customer customer;
-            public String compileCustomerSummary() {
-                String s = customer.getFullName() + " (" + customer.getEmail() + ")\n";
-                int recent = 0;
-                for (Order o : customer.getOrders()) {
-                    if (o.getDate().after(someCutoff())) recent++;
-                    s += "Order: " + o.getId() + " amount=" + o.getAmount() + "\n";
+            public class ReportPrinter {
+            class Invoice {
+                private Customer customer;
+                public String compileCustomerSummary() {
+                    String s = customer.getFullName() + " (" + customer.getEmail() + ")\n";
+                    int recent = 0;
+                    for (Order o : customer.getOrders()) {
+                        if (o.getDate().after(someCutoff())) recent++;
+                        s += "Order: " + o.getId() + " amount=" + o.getAmount() + "\n";
+                    }
+                    s += "Recent orders: " + recent + "\n";
+                    return s;
                 }
-                s += "Recent orders: " + recent + "\n";
-                return s;
             }
-        }
 
         Example of Long Method (4):
-        class ReportBuilder {
-            void buildReport(List<String> rows) {
-                StringBuilder sb = new StringBuilder();
-                for (String r : rows) {
-                    if (r == null || r.isEmpty()) {
-                        sb.append("EMPTY\n");
-                        continue;
+            class ReportBuilder {
+                void buildReport(List<String> rows) {
+                    StringBuilder sb = new StringBuilder();
+
+                    // Validate
+                    if (rows == null || rows.isEmpty()) {
+                        System.out.println("No rows to process");
+                        return;
                     }
-                    sb.append("Row: ").append(r).append("\n");
-                    for (int i = 0; i < 3; i++) {
-                        sb.append("Processing pass ").append(i).append(" for ").append(r).append("\n");
+
+                    // Process rows
+                    for (String r : rows) {
+                        if (r == null || r.isEmpty()) {
+                            sb.append("EMPTY\n");
+                            continue;
+                        }
+                        sb.append("Row: ").append(r).append("\n");
+
+                        for (int i = 0; i < 3; i++) {
+                            sb.append("Pass ").append(i).append(" for ").append(r).append("\n");
+                        }
                     }
+
+                    // Aggregate
+                    sb.append("Total: ").append(rows.size()).append("\n");
+                    System.out.println(sb.toString());
                 }
-                // aggregation and final formatting
-                int total = rows.size();
-                sb.append("Total: ").append(total).append("\n");
-                System.out.println(sb.toString());
             }
-        }
         """
-SYS_MSG_SINGLE_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
+SYS_MSG_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
         You are a software quality expert. Your task is to identify code smells in Java code snippets.
         Code smells indicate potential maintainability or design problems:
         0 = No smell: Code is clean and well-structured
@@ -293,7 +441,7 @@ SYS_MSG_SINGLE_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
 SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
         You are a software quality critic/verifier. You will be shown:
         1) A Java code snippet
-        2) A proposed label produced by the generator_agent (a single digit 0-4)
+        2) A proposed label produced by the td_detection_generator_agent (a single digit 0-4)
 
         Labels:
         0 = No smell: Code is clean and well-structured
@@ -311,7 +459,7 @@ SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
                 REJECTED|<correct_digit>|<brief_reason>
             where:
             * <correct_digit> is the correct label (0-4).
-            * <brief_reason> is a concise 1-2 short-sentence justification (max ~25 words) that explains the primary evidence for the correction.
+            * <brief_reason> is a concise 1-2 short-sentence justification (max 25 words) that explains the primary evidence for the correction.
             Use '|' (pipe) as separators and do not include any other characters, lines, or commentary.
 
         Examples of valid critic outputs:
@@ -326,7 +474,7 @@ SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
 SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
         You are a software quality critic/verifier. You will be shown:
         1) A Java code snippet
-        2) A proposed label produced by the generator_agent (a single digit 0-4)
+        2) A proposed label produced by the td_detection_generator_agent (a single digit 0-4)
 
         Labels:
         0 = No smell: Code is clean and well-structured
@@ -357,6 +505,123 @@ SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
 
         Here are a few examples of code snipets and the types of code smells they contain:
         Example of Data Class (2):
+            class ClientRecord {
+                private String id;
+                private String contact;
+                private boolean active;
+                public ClientRecord(String id, String contact, boolean active) {
+                    this.id = id;
+                    this.contact = contact;
+                    this.active = active;
+                }
+                public String getId() { return id; }
+                public void setId(String id) { this.id = id; }
+                public String getContact() { return contact; }
+                public void setContact(String contact) { this.contact = contact; }
+                public boolean isActive() { return active; }
+                public void setActive(boolean active) { this.active = active; }
+            }
+
+        Example of Feature Envy (3):
+            public class ReportPrinter {
+            class Invoice {
+                private Customer customer;
+                public String compileCustomerSummary() {
+                    String s = customer.getFullName() + " (" + customer.getEmail() + ")\n";
+                    int recent = 0;
+                    for (Order o : customer.getOrders()) {
+                        if (o.getDate().after(someCutoff())) recent++;
+                        s += "Order: " + o.getId() + " amount=" + o.getAmount() + "\n";
+                    }
+                    s += "Recent orders: " + recent + "\n";
+                    return s;
+                }
+            }
+
+        Example of Long Method (4):
+            class ReportBuilder {
+                void buildReport(List<String> rows) {
+                    StringBuilder sb = new StringBuilder();
+
+                    // Validate
+                    if (rows == null || rows.isEmpty()) {
+                        System.out.println("No rows to process");
+                        return;
+                    }
+
+                    // Process rows
+                    for (String r : rows) {
+                        if (r == null || r.isEmpty()) {
+                            sb.append("EMPTY\n");
+                            continue;
+                        }
+                        sb.append("Row: ").append(r).append("\n");
+
+                        for (int i = 0; i < 3; i++) {
+                            sb.append("Pass ").append(i).append(" for ").append(r).append("\n");
+                        }
+                    }
+
+                    // Aggregate
+                    sb.append("Total: ").append(rows.size()).append("\n");
+                    System.out.println(sb.toString());
+                }
+            }
+        """
+
+SYS_MSG_TD_DETECTION_REFINER_ZERO_SHOT = """
+    You are a software quality refiner. You will be given three inputs:
+    CODE_SNIPPET: a Java code snippet (string)
+    GENERATOR_LABEL: a single digit (0-4) produced by the td_detection_generator_agent
+    CRITIC_FEEDBACK: either APPROVED|<digit>| or REJECTED|<digit>|<brief_reason> or empty (if no critic) produced by the td_detection_critic_agent
+
+    Labels:
+    0 = No smell: Code is clean and well-structured
+    1 = Blob: A class with many responsibilities, often large and unfocused.
+    2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+    3 = Feature Envy: A method that heavily depends on another class's data.
+    4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
+
+    Task:
+    - Review CODE_SNIPPET, the GENERATOR_LABEL, and CRITIC_FEEDBACK (when present).
+    - Decide the single best label (0-4) for the snippet, taking all information into account.
+    - Prefer the critic's corrected digit if CRITIC_FEEDBACK is REJECTED|<digit>|... unless you identify stronger evidence in the code to choose a different label.
+    - If CRITIC_FEEDBACK is APPROVED|<digit>|, default to that label unless you find clear evidence the code is different.
+    - Always produce exactly one character: the final digit (0-4) only. No explanations, no punctuation, no whitespace.
+
+    Output rules (strict):
+    - Print exactly a single digit (0, 1, 2, 3, or 4) and nothing else.
+    - Do not print APPROVED/REJECTED or any text. Do not print newline padding or commentary.
+    - If you cannot confidently assign a label, output the digit that is the most defensible given the code (do not output an error token).
+    """
+
+SYS_MSG_TD_DETECTION_REFINER_FEW_SHOT = """
+    You are a software quality refiner. You will be given three inputs:
+    CODE_SNIPPET: a Java code snippet (string)
+    GENERATOR_LABEL: a single digit (0-4) produced by the td_detection_generator_agent
+    CRITIC_FEEDBACK: either APPROVED|<digit>| or REJECTED|<digit>|<brief_reason> or empty (if no critic) produced by the td_detection_critic_agent
+
+    Labels:
+    0 = No smell: Code is clean and well-structured
+    1 = Blob: A class with many responsibilities, often large and unfocused.
+    2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+    3 = Feature Envy: A method that heavily depends on another class's data.
+    4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
+
+    Task:
+    - Review CODE_SNIPPET, the GENERATOR_LABEL, and CRITIC_FEEDBACK (when present).
+    - Decide the single best label (0-4) for the snippet, taking all information into account.
+    - Prefer the critic's corrected digit if CRITIC_FEEDBACK is REJECTED|<digit>|... unless you identify stronger evidence in the code to choose a different label.
+    - If CRITIC_FEEDBACK is APPROVED|<digit>|, default to that label unless you find clear evidence the code is different.
+    - Always produce exactly one character: the final digit (0-4) only. No explanations, no punctuation, no whitespace.
+
+    Output rules (strict):
+    - Print exactly a single digit (0, 1, 2, 3, or 4) and nothing else.
+    - Do not print APPROVED/REJECTED or any text. Do not print newline padding or commentary.
+    - If you cannot confidently assign a label, output the digit that is the most defensible given the code (do not output an error token).
+
+    Here are a few examples of code snipets and the types of code smells they contain:
+    Example of Data Class (2):
         class ClientRecord {
             private String id;
             private String contact;
@@ -374,7 +639,7 @@ SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
             public void setActive(boolean active) { this.active = active; }
         }
 
-        Example of Feature Envy (3):
+    Example of Feature Envy (3):
         public class ReportPrinter {
         class Invoice {
             private Customer customer;
@@ -390,28 +655,42 @@ SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
             }
         }
 
-        Example of Long Method (4):
+    Example of Long Method (4):
         class ReportBuilder {
             void buildReport(List<String> rows) {
                 StringBuilder sb = new StringBuilder();
+
+                // Validate
+                if (rows == null || rows.isEmpty()) {
+                    System.out.println("No rows to process");
+                    return;
+                }
+
+                // Process rows
                 for (String r : rows) {
                     if (r == null || r.isEmpty()) {
                         sb.append("EMPTY\n");
                         continue;
                     }
                     sb.append("Row: ").append(r).append("\n");
+
                     for (int i = 0; i < 3; i++) {
-                        sb.append("Processing pass ").append(i).append(" for ").append(r).append("\n");
+                        sb.append("Pass ").append(i).append(" for ").append(r).append("\n");
                     }
                 }
-                // aggregation and final formatting
-                int total = rows.size();
-                sb.append("Total: ").append(total).append("\n");
+
+                // Aggregate
+                sb.append("Total: ").append(rows.size()).append("\n");
                 System.out.println(sb.toString());
             }
         }
+    """
 
-        """
+
+# ========================================================================================
+# VULNERABILITY DETECTION
+# ========================================================================================
+
 
 # ========================================================================================
 # Single-agent VULNERABILITY DETECTION
