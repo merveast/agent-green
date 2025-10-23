@@ -16,8 +16,8 @@ TASK = "td-detection"
 DESIGN = "SA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
 
 """
-IN_FILE = "HDFS_200_sampled.log"
-GT_FILE = "HDFS_200_sampled_log_structured.csv"
+IN_FILE = "HDFS_385_sampled.log"
+GT_FILE = "HDFS_385_sampled_log_structured_corrected.csv"
 # Task and design settings
 #TASK = "log-parsing" # options: "log-parsing", "log-analysis", "code-generation", "vul-detection", "td-detection"
 TASK = "log-parsing"
@@ -78,6 +78,9 @@ SYS_MSG_SINGLE_LOG_PARSER_FEW_SHOT = """
         
         081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
         Receiving block <*> src: <*>:<*> dest: <*>:<*>
+
+        081110 060453 7193 INFO dfs.DataNode$DataXceiver: 10.251.199.225:50010 Served block blk_8457344665564381337 to /10.251.199.225
+        <*>:<*> Served block <*> to <*>
         """
 
 SYS_MSG_SINGLE_LOG_PARSER_ZERO_SHOT = """
@@ -115,11 +118,14 @@ SYS_MSG_LOG_PARSER_GENERATOR_FEW_SHOT = """
         Print only the input log's template.
 
         Here are a few examples of log messages and their corresponding templates:
-        081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
+        081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
         BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
         
         081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
         Receiving block <*> src: <*>:<*> dest: <*>:<*>
+
+        081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+        PacketResponder <*> for block <*> terminating
         """
 
 SYS_MSG_LOG_PARSER_GENERATOR_ZERO_SHOT = """
@@ -148,11 +154,14 @@ SYS_MSG_LOG_PARSER_CRITIC_FEW_SHOT = """
                 If the template is correct, do not provide any suggestions, and do not even print the correct template again.
                 
                 Here are a few examples of log messages and their corresponding templates:
-                081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
+                081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
                 BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
-        
+                
                 081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
                 Receiving block <*> src: <*>:<*> dest: <*>:<*>
+
+                081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+                PacketResponder <*> for block <*> terminating
                 """
 
 SYS_MSG_LOG_PARSER_CRITIC_ZERO_SHOT = """
@@ -178,11 +187,14 @@ SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_FEW_SHOT = """
         If both templates are wrong, attempt to correct and return a valid one.
         
         Here are a few examples of log messages and their corresponding templates:
-        081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
+        081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
         BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
         
         081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
         Receiving block <*> src: <*>:<*> dest: <*>:<*>
+
+        081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+        PacketResponder <*> for block <*> terminating
         """
 
 SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_ZERO_SHOT = """
@@ -241,8 +253,8 @@ SYS_MSG_LOG_PARSER_REFINER_FEW_SHOT = """
 
     Examples (for reference, do not print these):
     Example 1:
-        ORIGINAL_LOG: 081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
-        PARSER_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
+        ORIGINAL_LOG: 081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+        PARSER_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
         CRITIC_FEEDBACK: REJECTED|BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>|Parser left raw IP and numeric values unabstracted
         EXPECTED OUTPUT: BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
     Example 2:
@@ -250,6 +262,11 @@ SYS_MSG_LOG_PARSER_REFINER_FEW_SHOT = """
         PARSER_TEMPLATE: Receiving block <*> src: <*>:<*> dest: <*>:<*>
         CRITIC_FEEDBACK: APPROVED
         EXPECTED OUTPUT: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+    Example 3:
+        ORIGINAL_LOG: 081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+        PARSER_TEMPLATE: PacketResponder 1 for block blk_38865049064139660 terminating
+        CRITIC_FEEDBACK: REJECTED|PacketResponder <*> for block <*> terminating|Parser left raw numeric and block values unabstracted
+        EXPECTED OUTPUT: PacketResponder <*> for block <*> terminating
 """
 
 
@@ -345,22 +362,22 @@ SYS_MSG_LOG_ANALYSIS_REFINER_ZERO_SHOT = """
 # ========================================================================================
 # TECHNICAL DEBT DETECTION CONFIGURATION
 # ========================================================================================
-TASK_PROMPT_TD_DETECTION = """Look at the following code snippet and determine whether it contains a code smell:\n"""
+TASK_PROMPT_TD_DETECTION = """Look at the following Java code snippet and respond with only a single digit (0-4) that represents the most appropriate category:\n"""
 
 SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT ="""
-        You are a software quality expert. Your task is to identify code smells in Java code snippets.
-        Code smells indicate potential maintainability or design problems:
-        0 = No smell: Code is clean and well-structured
+        You are a software quality expert specialized in identifying code smells in Java code snippets.
+        Your task: Analyze each provided Java code snippet and classify it into exactly one of the following categories.
+        0 = No smell: Code is clean, and well-structured.
         1 = Blob: A class with many responsibilities, often large and unfocused.
-        2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+        2 = Data Class: A class that primarily contains fields with getters/setters but lacks meaningful behavior.
         3 = Feature Envy: A method that heavily depends on another class's data.
         4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
 
-        You will be shown a code snippet. Respond with a single digit according to the labels above.
-        Respond with a single digit only. Do not provide any explanations or additional text.
+        Analyze the snippet carefully and choose **only one** label that best fits.
+        Do **not** output any explanations, reasoning, or additional text.
 
-        Here are a few examples of code snipets and the types of code smells they contain:
-        Example of Data Class (2):
+        Here are a few examples of code snippets and the types of code smells they contain:
+        Example of Data Class ('2'):
             class ClientRecord {
                 private String id;
                 private String contact;
@@ -378,7 +395,7 @@ SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT ="""
                 public void setActive(boolean active) { this.active = active; }
             }
 
-        Example of Feature Envy (3):
+        Example of Feature Envy ('3'):
             public class ReportPrinter {
             class Invoice {
                 private Customer customer;
@@ -394,7 +411,7 @@ SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT ="""
                 }
             }
 
-        Example of Long Method (4):
+        Example of Long Method ('4'):
             class ReportBuilder {
                 void buildReport(List<String> rows) {
                     StringBuilder sb = new StringBuilder();
@@ -425,16 +442,16 @@ SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT ="""
             }
         """
 SYS_MSG_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
-        You are a software quality expert. Your task is to identify code smells in Java code snippets.
-        Code smells indicate potential maintainability or design problems:
-        0 = No smell: Code is clean and well-structured
+        You are a software quality expert specialized in identifying code smells in Java code snippets.
+        Your task: Analyze each provided Java code snippet and classify it into exactly one of the following categories.
+        0 = No smell: Code is clean, and well-structured.
         1 = Blob: A class with many responsibilities, often large and unfocused.
-        2 = Data Class: A class that only stores fields with getters/setters and no behavior.
+        2 = Data Class: A class that primarily contains fields with getters/setters but lacks meaningful behavior.
         3 = Feature Envy: A method that heavily depends on another class's data.
         4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
 
-        You will be shown a code snippet. Respond with a single digit according to the labels above.
-        Respond with a single digit only. Do not provide any explanations or additional text.
+        Analyze the snippet carefully and choose **only one** label that best fits.
+        Do **not** output any explanations, reasoning, or additional text.
         """
 
 
@@ -503,7 +520,7 @@ SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
         - Do not output anything other than the exact allowed formats above.
         - Keep the brief_reason factual, focused, and short (one or two clauses).
 
-        Here are a few examples of code snipets and the types of code smells they contain:
+        Here are a few examples of code snippets and the types of code smells they contain:
         Example of Data Class (2):
             class ClientRecord {
                 private String id;
@@ -620,7 +637,7 @@ SYS_MSG_TD_DETECTION_REFINER_FEW_SHOT = """
     - Do not print APPROVED/REJECTED or any text. Do not print newline padding or commentary.
     - If you cannot confidently assign a label, output the digit that is the most defensible given the code (do not output an error token).
 
-    Here are a few examples of code snipets and the types of code smells they contain:
+    Here are a few examples of code snippets and the types of code smells they contain:
     Example of Data Class (2):
         class ClientRecord {
             private String id;

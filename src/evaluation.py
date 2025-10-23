@@ -34,20 +34,34 @@ def evaluate_parsing(parsed_templates, ground_truth_templates):
     correct_parses = 0
     total_edit_distance = 0
     total_lcs_length = 0
+    total_edit_sim = 0
+    total_lcs_sim = 0
+
+    TP = FP = TN = FN = 0  
 
     line_metrics = []
 
     for idx, (parsed_template, ground_truth_template) in enumerate(zip(parsed_templates, ground_truth_templates), start=1):
+        # --- Compute raw metrics ---
         edit_distance = calculate_edit_distance(parsed_template, ground_truth_template)
-        total_edit_distance += edit_distance
-
         lcs_length = calculate_lcs(parsed_template, ground_truth_template)
-        total_lcs_length += lcs_length
 
+        # --- Compute normalized metrics ---
+        max_len = max(len(parsed_template), len(ground_truth_template))
+        gt_len = len(ground_truth_template)
+        edit_sim = 1 - (edit_distance / max_len) if max_len > 0 else 0
+        lcs_sim = (lcs_length / gt_len) if gt_len > 0 else 0
+
+        total_edit_sim += edit_sim
+        total_lcs_sim += lcs_sim
+
+        # --- Correctness ---
         is_correct = parsed_template == ground_truth_template
-
         if is_correct:
             correct_parses += 1
+            TP += 1
+        else:
+            FP += 1
 
         print(f"Log Line {idx}:")
         print(f"  Parsed:    {parsed_template}")
@@ -61,27 +75,40 @@ def evaluate_parsing(parsed_templates, ground_truth_templates):
             "Parsed": parsed_template,
             "Ground Truth": ground_truth_template,
             "Edit Distance": edit_distance,
+            "Edit Similarity": round(edit_sim, 4),
             "LCS Length": lcs_length,
+            "LCS Similarity": round(lcs_sim, 4),
             "Is Correct": is_correct
         })
 
-
+    
+     # --- Averages ---
     avg_edit_distance = total_edit_distance / total_logs
     avg_lcs_length = total_lcs_length / total_logs
+    avg_edit_sim = total_edit_sim / total_logs
+    avg_lcs_sim = total_lcs_sim / total_logs
     parsing_accuracy = correct_parses / total_logs
-    
 
-    print("\nEvaluation Summary:")
-    print(f"  Parsing Accuracy: {parsing_accuracy:.2%}")
-    print(f"  Average Edit Distance: {avg_edit_distance:.2f}")
-    print(f"  Average LCS Length: {avg_lcs_length:.2f}")
+    print("\n=== Log Parsing Evaluation Summary ===")
+    print(f"Parsing Accuracy:        {parsing_accuracy:.2%}")
+    print(f"Average Edit Similarity: {avg_edit_sim:.4f}")
+    print(f"Average LCS Similarity:  {avg_lcs_sim:.4f}")
+    print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
+    print("======================================")
 
     return {
         "Parsing Accuracy": parsing_accuracy,
+        "Average Edit Similarity": avg_edit_sim,
+        "Average LCS Similarity": avg_lcs_sim,
         "Average Edit Distance": avg_edit_distance,
         "Average LCS Length": avg_lcs_length,
+        "TP": TP,
+        "FP": FP,
+        "TN": TN,
+        "FN": FN,
         "Per-Line Metrics": line_metrics
     }
+
 
 def save_per_line_metrics(results, design, results_dir=config.RESULT_DIR):
     filename = os.path.join(results_dir, f"{design}_per_line_metrics.csv")
@@ -93,6 +120,8 @@ def save_summary_metrics(results, design, results_dir=config.RESULT_DIR):
     filename = os.path.join(results_dir, f"{design}_summary_metrics.csv")
     summary_df = pd.DataFrame([{
         "Parsing Accuracy": results["Parsing Accuracy"],
+        "Average Edit Similarity": results["Average Edit Similarity"],
+        "Average LCS Similarity": results["Average LCS Similarity"],
         "Average Edit Distance": results["Average Edit Distance"],
         "Average LCS Length": results["Average LCS Length"]
     }])
@@ -192,4 +221,18 @@ def evaluate_and_save_td(normalize_fn, ground_truth, raw_preds, exp_name, result
     results = evaluate_td_per_line(ground_truth, normalized_preds)
     save_td_per_line_metrics(results, exp_name, results_dir)
     save_td_summary_metrics(results, exp_name, results_dir)
-    return results
+
+    # --- summary printout ---
+    print("\n=== Technical Debt Detection Evaluation Summary ===")
+    print(f"Accuracy: {results['Accuracy']:.2%}")
+    print(f"TP: {results['TP']} | FP: {results['FP']} | TN: {results['TN']} | FN: {results['FN']}")
+    print("====================================================\n")
+
+    # Return only the summary info (not per-line details)
+    return {
+        "Accuracy": results["Accuracy"],
+        "TP": results["TP"],
+        "FP": results["FP"],
+        "TN": results["TN"],
+        "FN": results["FN"]
+    }

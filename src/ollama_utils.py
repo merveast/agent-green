@@ -2,7 +2,22 @@ import subprocess
 import signal
 import os
 import threading
+import ollama
 from typing import Optional
+
+# --- Ollama Query Function ---
+def ask_ollama(model, prompt, temperature=0):
+    try:
+        response = ollama.generate(
+            model=model,
+            prompt=prompt,
+            options={'temperature': temperature},
+            think = False
+        )
+    except ollama.ResponseError as e:
+        print('Error:', e.error)
+        return None
+    return response.get('response', None)
 
 def _start_ollama_server_base(
     stream_stdout: bool = False,
