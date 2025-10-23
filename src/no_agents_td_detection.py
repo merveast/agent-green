@@ -24,7 +24,7 @@ def run_inference_with_emissions_td_detection(code_snippets, model_name, sys_pro
             response = ask_ollama(model_name, prompt)
             if response is not None:
                 td_results.append(response)
-                print(response)
+                #print(response)
             else:
                 print(f"[Warning] Skipped code snippet {i} — no response or invalid format.")
     finally:
