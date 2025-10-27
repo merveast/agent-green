@@ -122,3 +122,60 @@ python script/multi_agent_code_generation.py
 
 ```
 
+## How to run Log Parsing experiments
+
+Non-agentic Usage:
+```
+python src/no_agents_log_parsing.py --shot zero --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv   # run with zero-shot
+python src/no_agents_log_parsing.py --shot few --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv  # run with few-shot
+```
+
+Single-agent Usage:
+```
+python src/single_agent_log_parsing.py --shot zero --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv   # run with zero-shot
+python src/single_agent_log_parsing.py --shot few --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv  # run with few-shot
+```
+
+Dual-agent Usage:
+```
+python src/two_agent_log_parsing.py --shot zero --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv   # run with zero-shot
+python src/two_agent_log_parsing.py --shot few --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv  # run with few-shot
+```
+
+## How to run Technical Debt Detection experiments
+Non-agentic Usage:
+```
+python src/no_agents_td_detection.py --shot zero --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv   # run with zero-shot
+python src/no_agents_td_detection.py --shot few --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with few-shot
+```
+
+Single-agent Usage:
+```
+python src/single_agent_td_detection.py --shot zero --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv   # run with zero-shot
+python src/single_agent_td_detection.py --shot few --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with few-shot
+```
+
+Dual-agent Usage:
+```
+python src/two_agent_td_detection.py --shot zero --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with zero-shot
+python src/two_agent_td_detection.py --shot few --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with few-shot
+```
+
+
+Common CLI flags
+- `--input` (default from `config.IN_FILE`) — filename located inside `data/`.
+- `--gt` (default from `config.GT_FILE`) — ground-truth filename inside `data/` used for evaluation.
+- `--result-dir` (default from `config.RESULT_DIR`) — directory where outputs and CodeCarbon files are saved.
+- `--design` (default from `config.DESIGN`) — experiment design label. 
+- `--shot` (choices `zero`,`few`, default `few`) — choose zero-shot or few-shot system prompts where supported. The script auto-sets a prefix based on the experiment type (see mapping below) and the chosen `--shot`.
+
+Experiment design prefixes
+- `NA-` — non-agentic (no agents; scripts that call LLM directly). Example: `NA-few` or `NA-zero`.
+- `SA-`  — single-agent experiments (agent-based, single assistant). Example: `SA-few`.
+- `DA-` — dual/two-agent experiments (generator + critic). Example: `DA-few`.
+- `MA-` — multi-agent experiments (four agents). Example: `MA-few`.
+
+
+How `--shot` affects prompts
+- `--shot zero`: the script uses the corresponding ZERO_SHOT sys prompts (e.g. `SYS_MSG_TD_DETECTION_GENERATOR_ZERO_SHOT`).
+- `--shot few` : the script uses the FEW_SHOT sys prompts (e.g. `SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT`).
