@@ -111,19 +111,18 @@ def main():
 
     code_snippets = get_code_snippets(input_file_path)
 
-    #proc = start_ollama_server()
+    proc = start_ollama_server()
     time.sleep(5)
-    #try:
-    td_results = run_two_agent_inference_with_emissions_td_detection(code_snippets, llm_config, sys_prompt_generator, sys_prompt_critic, task_prompt, exp_name, RESULT_DIR)
-    save_td_labels(td_results, llm_config, DESIGN, RESULT_DIR)
-    #finally:
-        #stop_ollama_server(proc)
+    try:
+        td_results = run_two_agent_inference_with_emissions_td_detection(code_snippets, llm_config, sys_prompt_generator, sys_prompt_critic, task_prompt, exp_name, RESULT_DIR)
+        save_td_labels(td_results, llm_config, DESIGN, RESULT_DIR)
+    finally:
+        stop_ollama_server(proc)
 
     # Load ground truth and evaluate
     gt = get_td_ground_truth(ground_truth_file_path)
     results = evaluate_and_save_td(normalize_td_label, gt, td_results, exp_name)
     #print("Evaluation results:", results)
-
 
 if __name__ == "__main__":
     main()
