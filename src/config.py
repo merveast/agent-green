@@ -441,6 +441,7 @@ SYS_MSG_TD_DETECTION_GENERATOR_FEW_SHOT ="""
                 }
             }
         """
+
 SYS_MSG_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
         You are a software quality expert specialized in identifying code smells in Java code snippets.
         Your task: Analyze each provided Java code snippet and classify it into exactly one of the following categories.
@@ -456,8 +457,9 @@ SYS_MSG_TD_DETECTION_GENERATOR_ZERO_SHOT ="""
 
 
 SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
-        You are a software quality critic/verifier. You will be shown:
-        1) A Java code snippet
+        You are a software quality critic. Your task is to verify or correct the code smell label assigned to a Java code snippet by another agent.
+        You will be given:
+        1) The Java code snippet itself
         2) A proposed label produced by the td_detection_generator_agent (a single digit 0-4)
 
         Labels:
@@ -468,7 +470,7 @@ SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
         4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
 
         Task:
-        - Carefully review the code snippet and the generator's proposed label.
+        - Review the snippet and verify whether the proposed label is correct.
         - If the proposed label is correct, respond with exactly:
                 APPROVED|<correct_digit>|
             (nothing else, single token, uppercase).
@@ -489,10 +491,11 @@ SYS_MSG_TD_DETECTION_CRITIC_ZERO_SHOT = """
         """
 
 SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
-        You are a software quality critic/verifier. You will be shown:
-        1) A Java code snippet
+        You are a software quality critic. Your task is to verify or correct the code smell label assigned to a Java code snippet by another agent.
+        You will be given:
+        1) The Java code snippet itself
         2) A proposed label produced by the td_detection_generator_agent (a single digit 0-4)
-
+        
         Labels:
         0 = No smell: Code is clean and well-structured
         1 = Blob: A class with many responsibilities, often large and unfocused.
@@ -501,7 +504,7 @@ SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
         4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
 
         Task:
-        - Carefully review the code snippet and the generator's proposed label.
+        - Review the snippet and verify whether the proposed label is correct.
         - If the proposed label is correct, respond with exactly:
                 APPROVED|<correct_digit>|
             (nothing else, single token, uppercase).
