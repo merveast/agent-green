@@ -43,9 +43,6 @@ def append_result(result, detailed_file, csv_file, header_fields):
         f.write(",".join(row) + "\n")
 
 
-# ========================================================================
-# Improved Vulnerability Decision Parser
-# ========================================================================
 def extract_vulnerability_decision(response):
     """
     Parse board agent output and infer vulnerability decision robustly.
@@ -89,13 +86,7 @@ def extract_vulnerability_decision(response):
 # Agent creation
 # ========================================================================
 def create_vulnerability_agents(llm_config, prompt_type="zero_shot"):
-    """Create 4 agents depending on prompt_type."""
-    user_proxy = create_agent(
-        "conversable", "user_proxy_agent", llm_config,
-        sys_prompt="A human coordinator managing the vulnerability detection process.",
-        description="Proxy agent orchestrating multi-agent vulnerability detection."
-    )
-
+    """Create the 4 agents depending on prompt_type."""
     if prompt_type == "few_shot":
         researcher_prompt = config.SYS_MSG_SECURITY_RESEARCHER_FEW_SHOT
         author_prompt = config.SYS_MSG_CODE_AUTHOR_FEW_SHOT
@@ -133,7 +124,7 @@ def create_vulnerability_agents(llm_config, prompt_type="zero_shot"):
         description="Make final decisions on vulnerability validity and severity."
     )
 
-    return user_proxy, security_researcher, code_author, moderator, review_board
+    return security_researcher, code_author, moderator, review_board
 
 
 # ========================================================================
@@ -149,7 +140,7 @@ def run_inference_with_emissions(samples, llm_config, exp_name, result_dir, prom
     )
     tracker.start()
 
-    user_proxy, researcher, author, moderator, board = create_vulnerability_agents(llm_config, prompt_type)
+    researcher, author, moderator, board = create_vulnerability_agents(llm_config, prompt_type)
     results, errors = [], 0
 
     try:
@@ -157,44 +148,53 @@ def run_inference_with_emissions(samples, llm_config, exp_name, result_dir, prom
             print(f"\n--- Processing sample {i+1}/{len(samples)} ---")
 
             try:
-                r = user_proxy.initiate_chat(
-                    recipient=researcher,
-                    message=config.MULTI_AGENT_TASK_SECURITY_RESEARCHER.format(code=s["func"]),
-                    max_turns=1, summary_method="last_msg"
-                ).summary.strip()
+                # Step 1: Security Researcher analyzes code
+                researcher_task = config.MULTI_AGENT_TASK_SECURITY_RESEARCHER.format(code=s["func"])
+                researcher_response = researcher.generate_reply(
+                    messages=[{"role": "user", "content": researcher_task}]
+                ).get("content", "")
+                print(f"  ✓ Researcher analysis: {len(researcher_response)} chars")
 
-                a = user_proxy.initiate_chat(
-                    recipient=author,
-                    message=config.MULTI_AGENT_TASK_CODE_AUTHOR.format(
-                        researcher_findings=r, code=s["func"]
-                    ),
-                    max_turns=1, summary_method="last_msg"
-                ).summary.strip()
+                # Step 2: Code Author responds to findings
+                author_task = config.MULTI_AGENT_TASK_CODE_AUTHOR.format(
+                    researcher_findings=researcher_response, code=s["func"]
+                )
+                author_response = author.generate_reply(
+                    messages=[{"role": "user", "content": author_task}]
+                ).get("content", "")
+                print(f"  ✓ Author response: {len(author_response)} chars")
 
-                m = user_proxy.initiate_chat(
-                    recipient=moderator,
-                    message=config.MULTI_AGENT_TASK_MODERATOR.format(
-                        researcher_findings=r, author_response=a
-                    ),
-                    max_turns=1, summary_method="last_msg"
-                ).summary.strip()
+                # Step 3: Moderator summarizes the discussion
+                moderator_task = config.MULTI_AGENT_TASK_MODERATOR.format(
+                    researcher_findings=researcher_response, author_response=author_response
+                )
+                moderator_response = moderator.generate_reply(
+                    messages=[{"role": "user", "content": moderator_task}]
+                ).get("content", "")
+                print(f"  ✓ Moderator summary: {len(moderator_response)} chars")
 
-                b = user_proxy.initiate_chat(
-                    recipient=board,
-                    message=config.MULTI_AGENT_TASK_REVIEW_BOARD.format(
-                        moderator_summary=m, code=s["func"],
-                        researcher_findings=r, author_response=a
-                    ),
-                    max_turns=1, summary_method="last_msg"
-                ).summary.strip()
+                # Step 4: Review Board makes final decision
+                board_task = config.MULTI_AGENT_TASK_REVIEW_BOARD.format(
+                    moderator_summary=moderator_response, code=s["func"],
+                    researcher_findings=researcher_response, author_response=author_response
+                )
+                board_response = board.generate_reply(
+                    messages=[{"role": "user", "content": board_task}]
+                ).get("content", "")
+                print(f"  ✓ Review Board decision: {len(board_response)} chars")
 
-                vuln, reasoning = extract_vulnerability_decision(b)
+                vuln, reasoning = extract_vulnerability_decision(board_response)
 
                 result = dict(s)
                 result.update({
                     "vuln": vuln,
                     "reasoning": reasoning,
-                    "discussion": {"researcher": r, "author": a, "moderator": m, "board": b},
+                    "discussion": {
+                        "researcher": researcher_response, 
+                        "author": author_response, 
+                        "moderator": moderator_response, 
+                        "board": board_response
+                    },
                     "timestamp": datetime.now().isoformat(),
                 })
 
