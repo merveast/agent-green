@@ -1,303 +1,261 @@
+#!/usr/bin/env python3
+# ================================================================
+# Dual-Agent Vulnerability Detection
+# ================================================================
+
 import os
 import json
-import config
+import argparse
 from datetime import datetime
 from codecarbon import OfflineEmissionsTracker
+from sklearn.metrics import classification_report, confusion_matrix
+
+import config
 from vuln_evaluation import evaluate_and_save_vulnerability, normalize_vulnerability_basic
 from agent_utils_vuln import create_agent
-from autogen.agentchat.conversable_agent import ConversableAgent
-from pathlib import Path
 
-# --- Configuration ---
+
+# ================================================================
+# CONFIGURATION
+# ================================================================
 llm_config = config.LLM_CONFIG
 DATASET_FILE = config.VULN_DATASET
 RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-DESIGN = "DA-vuln-two"  # Dual Agent design
-model = llm_config["config_list"][0]["model"].replace(":", "-")
-timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-exp_name = f"{DESIGN}_{model}_{timestamp}"
+
+# ================================================================
+# FILE UTILITIES
+# ================================================================
+def initialize_results_files(exp_name, result_dir, header_fields):
+    detailed_file = os.path.join(result_dir, f"{exp_name}_detailed_results.jsonl")
+    csv_file = os.path.join(result_dir, f"{exp_name}_detailed_results.csv")
+
+    with open(csv_file, "w") as f:
+        f.write(",".join(header_fields) + "\n")
+
+    return detailed_file, csv_file
 
 
-# --- Agent Creation ---
-def create_vulnerability_agents(llm_config):
-    """Create the two vulnerability detection agents"""
-    user_proxy = create_agent(
-        "conversable",
-        "user_proxy_agent",
-        llm_config,
-        sys_prompt="A human admin coordinating the vulnerability assessment.",
-        description="A proxy for human input coordinating the dual-agent vulnerability assessment."
-    )
+def append_result(result, detailed_file, csv_file, header_fields):
+    with open(detailed_file, "a") as f:
+        f.write(json.dumps(result, ensure_ascii=False) + "\n")
+
+    def esc(x):
+        if x is None:
+            return ""
+        s = str(x)
+        if "," in s or '"' in s or "\n" in s:
+            return '"' + s.replace('"', '""') + '"'
+        return s
+
+    with open(csv_file, "a") as f:
+        row = [esc(result.get(h, "")) for h in header_fields]
+        f.write(",".join(row) + "\n")
+
+
+# ================================================================
+# DECISION PARSER
+# ================================================================
+def extract_vulnerability_decision(response):
+    """Extract (1=vulnerable, 0=safe) and reasoning text."""
+    try:
+        text = response.strip()
+        if text.startswith("{") or text.startswith("["):
+            data = json.loads(text)
+            if isinstance(data, dict):
+                decision = data.get("vulnerability_detected", False)
+                reasoning = data.get("analysis", data.get("reasoning", text))
+            elif isinstance(data, list):
+                decision = any(d.get("vulnerability_detected", False) for d in data)
+                reasoning = "; ".join(d.get("analysis", d.get("reasoning", "")) for d in data)
+            else:
+                decision, reasoning = False, text
+        else:
+            lowered = text.lower()
+            decision = any(k in lowered for k in ["vulnerable", "unsafe", "security issue"])
+            reasoning = text
+        return (1 if decision else 0), reasoning
+    except Exception as e:
+        return 0, f"Error parsing: {e}"
+
+
+# ================================================================
+# AGENT CREATION
+# ================================================================
+def create_dual_agents(llm_config, prompt_type="zero_shot"):
+    """Create Code Author + Security Analyst agents (few/zero shot)."""
+    if prompt_type == "few_shot":
+        code_author_prompt = config.SYS_MSG_CODE_AUTHOR_DUAL_FEW_SHOT
+        analyst_prompt = config.SYS_MSG_SECURITY_ANALYST_FEW_SHOT
+        print("Using FEW-SHOT prompts for both agents.")
+    else:
+        code_author_prompt = config.SYS_MSG_CODE_AUTHOR_DUAL_ZERO_SHOT
+        analyst_prompt = config.SYS_MSG_SECURITY_ANALYST_ZERO_SHOT
+        print("Using ZERO-SHOT prompts for both agents.")
 
     code_author = create_agent(
-        "assistant",
-        "code_author_agent",
-        llm_config,
-        sys_prompt=config.SYS_MSG_CODE_AUTHOR,
-        description="Generate and revise code based on security feedback."
+        "assistant", "code_author_agent", llm_config,
+        sys_prompt=code_author_prompt,
+        description="Explains or defends the code snippet."
     )
 
     security_analyst = create_agent(
-        "assistant", 
-        "security_analyst_agent",
-        llm_config,
-        sys_prompt=config.SYS_MSG_SECURITY_ANALYST,
-        description="Analyze code for vulnerabilities, provide feedback, and make final decisions."
+        "assistant", "security_analyst_agent", llm_config,
+        sys_prompt=analyst_prompt,
+        description="Analyzes the code and produces final vulnerability decision."
     )
 
-    return user_proxy, code_author, security_analyst
+    return code_author, security_analyst
 
 
-# --- Data Loading ---
-def load_vulnerability_dataset(file_path):
-    """Load vulnerability dataset from JSONL file"""
-    samples = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                if 'func' in data and 'target' in data:
-                    sample = {
-                        'idx': data.get('idx'),
-                        'project': data.get('project'),
-                        'commit_id': data.get('commit_id'),
-                        'project_url': data.get('project_url'),
-                        'commit_url': data.get('commit_url'),
-                        'commit_message': data.get('commit_message'),
-                        'func': data['func'],
-                        'target': data['target'],
-                        'cwe': data.get('cwe'),
-                        'cve': data.get('cve'),
-                        'cve_desc': data.get('cve_desc')
-                    }
-                    samples.append(sample)
-            except json.JSONDecodeError:
-                continue
-    return samples
+# ================================================================
+# INFERENCE WITH EMISSIONS TRACKING
+# ================================================================
+def run_inference_with_emissions(samples, llm_config, exp_name, result_dir, prompt_type):
+    dataset_keys = list(samples[0].keys()) if samples else []
+    header_fields = dataset_keys + ["vuln", "reasoning", "timestamp"]
+    detailed_file, csv_file = initialize_results_files(exp_name, result_dir, header_fields)
 
-
-# --- Result Helpers ---
-def initialize_results_files(exp_name, result_dir):
-    detailed_file = os.path.join(result_dir, f"{exp_name}_detailed_results.jsonl")
-    csv_file = os.path.join(result_dir, f"{exp_name}_detailed_results.csv")
-    energy_file = os.path.join(result_dir, f"{exp_name}_energy_tracking.json")
-
-    with open(csv_file, 'w') as f:
-        f.write("idx,project,commit_id,project_url,commit_url,commit_message,"
-                "ground_truth,vuln,reasoning,cwe,cve,cve_desc,iteration_1_feedback,"
-                "iteration_2_decision\n")
-
-    return detailed_file, csv_file, energy_file
-
-
-def append_result(result, detailed_file, csv_file):
-    """Append a result to both JSONL and CSV"""
-    with open(detailed_file, 'a') as f:
-        f.write(json.dumps(result) + '\n')
-
-    with open(csv_file, 'a') as f:
-        def escape(field):
-            if field is None:
-                return ""
-            field_str = str(field)
-            if ',' in field_str or '"' in field_str or '\n' in field_str:
-                return '"' + field_str.replace('"', '""') + '"'
-            return field_str
-
-        row = [
-            escape(result['idx']),
-            escape(result['project']),
-            escape(result['commit_id']),
-            escape(result['project_url']),
-            escape(result['commit_url']),
-            escape(result['commit_message']),
-            escape(result['ground_truth']),
-            escape(result['vuln']),
-            escape(result['reasoning']),
-            escape(result['cwe']),
-            escape(result['cve']),
-            escape(result['cve_desc']),
-            escape(result.get('iteration_1_feedback', '')),
-            escape(result.get('iteration_2_decision', ''))
-        ]
-        f.write(','.join(row) + '\n')
-
-
-def extract_vulnerability_decision(analyst_response):
-    """Parse security analyst response into (decision, reasoning)"""
-    try:
-        # Try to parse as JSON first
-        if analyst_response.strip().startswith('{') or analyst_response.strip().startswith('['):
-            decision_data = json.loads(analyst_response.strip())
-            if isinstance(decision_data, dict):
-                decision = decision_data.get('vulnerability_detected', False)
-                reasoning = decision_data.get('reasoning', analyst_response)
-            elif isinstance(decision_data, list) and len(decision_data) > 0:
-                decision = any(item.get('vulnerability_detected', False) for item in decision_data)
-                reasoning = "; ".join(item.get('reasoning', '') for item in decision_data)
-            else:
-                decision = False
-                reasoning = analyst_response
-        else:
-            # Parse text-based response
-            text = analyst_response.lower()
-            decision = any(keyword in text for keyword in [
-                'vulnerability detected', 'vulnerable', 'security risk', 
-                'exploit', 'attack vector', 'unsafe'
-            ])
-            reasoning = analyst_response
-            
-        return (1 if decision else 0), reasoning
-    except Exception as e:
-        print(f"Error parsing analyst response: {e}")
-        # Fallback: keyword-based detection
-        text = analyst_response.lower()
-        decision = any(keyword in text for keyword in [
-            'vulnerability', 'vulnerable', 'security risk', 'exploit'
-        ])
-        return (1 if decision else 0), analyst_response
-
-
-# --- Dual Agent Inference ---
-def run_dual_agent_inference_with_emissions(samples, llm_config, exp_name, result_dir):
-    detailed_file, csv_file, energy_file = initialize_results_files(exp_name, result_dir)
     tracker = OfflineEmissionsTracker(
-        project_name=exp_name,
-        output_dir=result_dir,
-        save_to_file=True,
-        country_iso_code="CAN"
+        project_name=exp_name, output_dir=result_dir, save_to_file=True, country_iso_code="CAN"
     )
-
     tracker.start()
 
-    user_proxy, code_author, security_analyst = create_vulnerability_agents(llm_config)
-    results = []
+    code_author, security_analyst = create_dual_agents(llm_config, prompt_type)
+    results, errors = [], 0
 
     try:
-        for i, sample in enumerate(samples):
-            print(f"\n--- Processing sample {i+1}/{len(samples)} (idx: {sample['idx']}) ---")
+        for i, s in enumerate(samples):
+            print(f"\n--- Processing sample {i+1}/{len(samples)} ---")
 
-            # ITERATION 1: Initial submission and feedback
-            print("Iteration 1: Code submission and initial analysis...")
-            
-            # Code author submits the code
-            submission = user_proxy.initiate_chat(
-                recipient=code_author,
-                message=config.DUAL_AGENT_TASK_CODE_SUBMISSION.format(code=sample['func']),
-                max_turns=1,
-                summary_method="last_msg"
-            ).summary.strip()
+            try:
+                # 1️ Code Author Stage
+                author_submission = code_author.generate_reply(messages=[{
+                    "role": "user",
+                    "content": config.DUAL_AGENT_TASK_CODE_SUBMISSION.format(code=s["func"])
+                }])
+                if isinstance(author_submission, dict):
+                    author_submission = json.dumps(author_submission, ensure_ascii=False)
+                author_submission = str(author_submission).strip()
 
-            # Security analyst provides feedback
-            feedback = user_proxy.initiate_chat(
-                recipient=security_analyst,
-                message=config.DUAL_AGENT_TASK_SECURITY_FEEDBACK.format(
-                    code=sample['func'],
-                    submission=submission
-                ),
-                max_turns=1,
-                summary_method="last_msg"
-            ).summary.strip()
+                # 2️ Security Analyst Stage
+                analyst_feedback = security_analyst.generate_reply(messages=[{
+                    "role": "user",
+                    "content": config.DUAL_AGENT_TASK_FINAL_DECISION.format(
+                        code=s["func"], author_response=author_submission
+                    )
+                }])
+                if isinstance(analyst_feedback, dict):
+                    analyst_feedback = json.dumps(analyst_feedback, ensure_ascii=False)
+                analyst_feedback = str(analyst_feedback).strip()
 
-            # ITERATION 2: Revision and final decision
-            print("Iteration 2: Code revision and final assessment...")
-            
-            # Code author revises based on feedback
-            revision = user_proxy.initiate_chat(
-                recipient=code_author,
-                # message=config.DUAL_AGENT_TASK_CODE_REVISION.format(
-                #     original_code=sample['func'],
-                #     feedback=feedback
-                # ),
-                message=config.DUAL_AGENT_TASK_CODE_REVISION.format(
-                    initial_code=sample['func'],  # Use initial_code instead
-                    feedback=feedback
-                ),
-                max_turns=1,
-                summary_method="last_msg"
-            ).summary.strip()
+                vuln, reasoning = extract_vulnerability_decision(analyst_feedback)
 
-            # Security analyst makes final decision
-            final_decision = user_proxy.initiate_chat(
-                recipient=security_analyst,
-                message=config.DUAL_AGENT_TASK_FINAL_DECISION.format(
-                    original_code=sample['func'],
-                    revised_analysis=revision,
-                    previous_feedback=feedback
-                ),
-                max_turns=1,
-                summary_method="last_msg"
-            ).summary.strip()
+                result = dict(s)
+                result.update({
+                    "vuln": vuln,
+                    "reasoning": reasoning,
+                    "discussion": {
+                        "author_submission": author_submission,
+                        "analyst_feedback": analyst_feedback
+                    },
+                    "timestamp": datetime.now().isoformat(),
+                })
 
-            # Extract final vulnerability decision
-            vuln_decision, reasoning = extract_vulnerability_decision(final_decision)
+                append_result(result, detailed_file, csv_file, header_fields)
+                results.append(result)
+                print(f"Completed: vuln={vuln}, gt={s.get('target')}")
 
-            result = {
-                'idx': sample['idx'],
-                'project': sample['project'],
-                'commit_id': sample['commit_id'],
-                'project_url': sample['project_url'],
-                'commit_url': sample['commit_url'],
-                'commit_message': sample['commit_message'],
-                'ground_truth': sample['target'],
-                'vuln': vuln_decision,
-                'reasoning': reasoning,
-                'dual_agent_conversation': {
-                    'iteration_1_submission': submission,
-                    'iteration_1_feedback': feedback,
-                    'iteration_2_revision': revision,
-                    'iteration_2_final_decision': final_decision
-                },
-                'iteration_1_feedback': feedback,
-                'iteration_2_decision': final_decision,
-                'cwe': sample['cwe'],
-                'cve': sample['cve'],
-                'cve_desc': sample['cve_desc'],
-                'session': 1,
-                'timestamp': datetime.now().isoformat()
-            }
-
-            append_result(result, detailed_file, csv_file)
-            results.append(result)
-
-            if (i + 1) % 5 == 0:
-                print(f"Progress saved: {i+1} samples")
+            except Exception as e:
+                errors += 1
+                print(f"Error: {e}")
+                result = dict(s)
+                result.update({
+                    "vuln": 0,
+                    "reasoning": f"ERROR: {str(e)}",
+                    "timestamp": datetime.now().isoformat(),
+                    "skipped": True,
+                })
+                append_result(result, detailed_file, csv_file, header_fields)
+                results.append(result)
 
     finally:
         emissions = tracker.stop()
-        print(f"\nEmissions this run: {emissions:.6f} kg CO2")
+        print(f"\nEmissions this run: {emissions:.6f} kg CO₂")
+        print(f"Errors encountered: {errors}")
 
     return results
 
 
-# --- Main Execution ---
+# ================================================================
+# MAIN ENTRY POINT
+# ================================================================
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--prompt_type", choices=["zero_shot", "few_shot"], default="zero_shot")
+    args = parser.parse_args()
+
+    prompt_type = args.prompt_type
+    DESIGN = f"DA-vuln-two-{prompt_type}"
+
+    model = llm_config["config_list"][0]["model"].replace(":", "-")
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    exp_name = f"{DESIGN}_{model}_vuln_{timestamp}"
+
     print("Loading dataset...")
-    samples = load_vulnerability_dataset(DATASET_FILE)
-    print(f"Loaded {len(samples)} samples")
+    samples = []
+    with open(DATASET_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                data = json.loads(line.strip())
+                if "func" in data and "target" in data:
+                    samples.append(data)
+            except json.JSONDecodeError:
+                continue
 
-    print(f"Running {DESIGN} dual-agent vulnerability detection...")
-    results = run_dual_agent_inference_with_emissions(samples, llm_config, exp_name, RESULT_DIR)
+    print(f"Loaded {len(samples)} samples.")
+    if not samples:
+        print("No valid samples found. Exiting.")
+        return
 
-    predictions = [r['vuln'] for r in results]
-    ground_truth = [r['ground_truth'] for r in results]
+    print(f"Running {DESIGN} (1 round per agent, {prompt_type.upper()} mode)...")
+    results = run_inference_with_emissions(samples, llm_config, exp_name, RESULT_DIR, prompt_type)
+
+    # ==================== Inline Evaluation ====================
+    preds = [r.get("vuln", 0) for r in results]
+    gts = [r.get("target", 0) for r in results]
+    acc = sum(p == g for p, g in zip(preds, gts)) / len(results) if results else 0
+
+    cm = confusion_matrix(gts, preds)
+    report = classification_report(gts, preds, target_names=["Not Vulnerable", "Vulnerable"])
+
+    print("\n=== EVALUATION SUMMARY ===")
+    print(f"Samples evaluated: {len(results)}")
+    print(f"Accuracy: {acc:.4f}")
+    print("\nConfusion Matrix:\n", cm)
+    print("\nClassification Report:\n", report)
+
+    detailed_file = os.path.join(RESULT_DIR, f"{exp_name}_detailed_results.jsonl")
+    with open(detailed_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps({
+            "evaluation_summary": {
+                "accuracy": round(acc, 4),
+                "confusion_matrix": cm.tolist(),
+                "classification_report": report
+            }
+        }, ensure_ascii=False) + "\n")
+
+    print(f"Evaluation results appended to: {detailed_file}")
 
     try:
-        eval_results = evaluate_and_save_vulnerability(
-            normalize_vulnerability_basic,
-            predictions,
-            DATASET_FILE,
-            exp_name
-        )
-        print("Evaluation Results:", eval_results)
+        evaluate_and_save_vulnerability(normalize_vulnerability_basic, preds, DATASET_FILE, exp_name)
     except Exception as e:
-        print("Evaluation failed:", e)
+        print(f"Evaluation skipped due to: {e}")
 
     print("\n=== FINAL SUMMARY ===")
     print(f"Samples processed: {len(results)}")
-    print("Dual-agent vulnerability detection completed!")
+    print("Dual-agent vulnerability detection completed successfully.")
 
 
 if __name__ == "__main__":
