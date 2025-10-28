@@ -22,7 +22,7 @@ Agent Green is a research project for evaluating the energy consumption and accu
 - Experiments cover four configurations:
   - **Non-Agentic (NA):** Direct LLM calls.
   - **Single Agent (SA):** One LM-based agent acts autonomously to complete the task.
-  - **Dual Agents (DA):** Two LLM-based agents; the first agent (Actor) operates as in SA, producing an initial output, while the second agent (Critic) aims to challenge the correctness of this output/
+  - **Dual Agents (DA):** Two LLM-based agents; the first agent (Actor) operates as in SA, producing an initial output, while the second agent (Critic) aims to challenge the correctness of this output.
   - **Multiple Agents (MA):** Four agents are involved in a coordinated setup, where two agents function similarly to those in DA, the third agent (Refiner) synthesizes and refines the outputs of the other two to produce the final response, the fourth agent (Orchestrator) coordinates the workflow. 
 
 ## Repository Structure
