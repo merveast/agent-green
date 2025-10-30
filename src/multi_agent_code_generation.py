@@ -2,6 +2,8 @@ import os
 import json
 import time
 import config
+import argparse
+import re
 from datetime import datetime
 from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
@@ -9,19 +11,30 @@ import sys
 import subprocess
 
 
+# --- Parse command line arguments ---
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Run multi-agent code generation')
+    parser.add_argument('--prompt_type', type=str, choices=['zero_shot', 'few_shot'], 
+                    default='zero_shot', help='Type of prompt to use')
+    return parser.parse_args()
+
+args = parse_arguments()
+
 # --- Configuration ---
 llm_config = config.LLM_CONFIG
 DATASET_FILE = config.HUMANEVAL_DATASET
 RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-DESIGN = "MA-optimized"
+# Design configuration
+DESIGN = f"MA-code-{args.prompt_type}"
 model = llm_config["config_list"][0]["model"].replace(":", "-")
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 exp_name = f"{DESIGN}_{model}_{timestamp}"
 
 print(f"Experiment: {exp_name}")
 print(f"Dataset: {DATASET_FILE}")
+print(f"Prompt Type: {args.prompt_type}")
 print(f"Results will be saved to: {RESULT_DIR}")
 
 
@@ -48,7 +61,7 @@ def create_moderator_agent(llm_config, sys_prompt):
     return AssistantAgent(
         name="moderator",
         system_message=sys_prompt,
-        description="Provide neutral summaries.",
+        description="Review code and provide feedback.",
         llm_config=llm_config,
         human_input_mode="NEVER",
     )
@@ -57,7 +70,7 @@ def create_review_board_agent(llm_config, sys_prompt):
     return AssistantAgent(
         name="review_board",
         system_message=sys_prompt,
-        description="Make final assessments.",
+        description="Make final assessment and improvements.",
         llm_config=llm_config,
         human_input_mode="NEVER",
     )
@@ -84,12 +97,11 @@ def read_code_generation_data(dataset_path):
 
 # --- Helper Functions ---
 def extract_code_from_response(response_text):
-    """Extract Python code from model response, removing thinking blocks"""
+    """Extract Python code from model response"""
     if not response_text:
         return ""
     
-    # Remove <think> blocks
-    import re
+    # Remove <think> blocks if present
     response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL)
     response_text = response_text.strip()
     
@@ -110,7 +122,7 @@ def extract_code_from_response(response_text):
                 code = '\n'.join(lines[1:])
             return code.strip()
     
-    # Method 3: Extract from 'def' or 'from' to end
+    # Method 3: Extract from 'def' or 'from' or 'import' to end
     lines = response_text.split('\n')
     code_lines = []
     found_start = False
@@ -122,7 +134,7 @@ def extract_code_from_response(response_text):
         if not found_start and stripped.startswith(('To solve', 'The ', 'This ', 'Here', 'Note:', '**', '[', 'I ', 'First', 'Challenge', 'Wait,', 'Let', 'So ', 'Yes,', 'Okay')):
             continue
         
-        # Start collecting from code
+        # Start collecting from imports or code
         if stripped.startswith(('def ', 'from ', 'import ', 'class ')):
             found_start = True
         
@@ -134,9 +146,10 @@ def extract_code_from_response(response_text):
     
     return response_text.strip()
 
-# --- With CodeCarbon Emissions Tracking ---
-def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir):
-    """Run multi-agent code generation with proper skip optimization"""
+
+# --- Multi-Agent Inference with Emissions Tracking ---
+def run_inference_with_emissions(code_samples, llm_config, sys_prompts, exp_name, result_dir, prompt_type):
+    """Run multi-agent code generation with emissions tracking - always use all 4 agents"""
     
     detailed_file = os.path.join(result_dir, f"{exp_name}_detailed_results.jsonl")
     summary_file = os.path.join(result_dir, f"{exp_name}_summary.json")
@@ -156,15 +169,17 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
         'total_samples': len(code_samples),
         'successful_extractions': 0,
         'failed_extractions': 0,
-        'skipped_review': 0,
-        'full_pipeline': 0
+        'used_programmer_code': 0,
+        'used_review_board_code': 0,
+        'prompt_type': prompt_type
     }
     
     try:
-        analyst = create_requirements_analyst(llm_config, config.SYS_MSG_REQUIREMENTS_ANALYST)
-        programmer = create_programmer_agent(llm_config, config.SYS_MSG_PROGRAMMER_MA)
-        moderator = create_moderator_agent(llm_config, config.SYS_MSG_MODERATOR_CODE)
-        review_board = create_review_board_agent(llm_config, config.SYS_MSG_REVIEW_BOARD_CODE)
+        # Create agents with appropriate system messages
+        analyst = create_requirements_analyst(llm_config, sys_prompts["analyst"])
+        programmer = create_programmer_agent(llm_config, sys_prompts["programmer"])
+        moderator = create_moderator_agent(llm_config, sys_prompts["moderator"])
+        review_board = create_review_board_agent(llm_config, sys_prompts["review_board"])
         
         for i, sample in enumerate(code_samples):
             task_id = sample.get('task_id', f'sample_{i}')
@@ -176,69 +191,76 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
             
             # === TURN 1: Requirements Analyst ===
             print("Turn 1: Requirements Analyst analyzing...")
-            analyst_task = config.MULTI_AGENT_TASK_REQUIREMENTS_ANALYST.format(prompt=problem_prompt)
+            # Select appropriate task prompt based on prompt_type
+            if args.prompt_type == 'zero_shot':
+                analyst_task = config.MULTI_AGENT_TASK_REQUIREMENTS_ANALYST_ZERO_SHOT.format(prompt=problem_prompt)
+            else:  # few_shot
+                analyst_task = config.MULTI_AGENT_TASK_ANALYST.format(prompt=problem_prompt)
+                
             res1 = analyst.generate_reply(messages=[{"content": analyst_task, "role": "user"}])
             analyst_findings = res1.get("content", "") if res1 else ""
             print(f"  Analyst findings: {len(analyst_findings)} chars")
             
             # === TURN 2: Programmer Implementation ===
-            print("Turn 2: Programmer implementing...")
-            programmer_task = config.MULTI_AGENT_TASK_PROGRAMMER.format(
-                analyst_findings=analyst_findings,
-                prompt=problem_prompt
-            )
+            print("Turn 2: Programmer implementing code...")
+            if args.prompt_type == 'zero_shot':
+                programmer_task = config.MULTI_AGENT_TASK_PROGRAMMER_ZERO_SHOT.format(
+                    analyst_findings=analyst_findings,
+                    prompt=problem_prompt
+                )
+            else:  # few_shot
+                programmer_task = config.MULTI_AGENT_TASK_PROGRAMMER.format(
+                    analyst_findings=analyst_findings,
+                    prompt=problem_prompt
+                )
+                
             res2 = programmer.generate_reply(messages=[{"content": programmer_task, "role": "user"}])
             programmer_response = res2.get("content", "") if res2 else ""
-            initial_code = extract_code_from_response(programmer_response)
-            print(f"  Programmer response: {len(programmer_response)} chars")
+            programmer_code = extract_code_from_response(programmer_response)
+            print(f"  Programmer code: {len(programmer_code)} chars")
             
             # === TURN 3: Moderator Review ===
-            print("Turn 3: Moderator reviewing...")
+            print("Turn 3: Moderator reviewing code...")
             moderator_task = config.MULTI_AGENT_TASK_MODERATOR_CODE.format(
-                analyst_findings=analyst_findings,
-                programmer_response=programmer_response,
-                prompt=problem_prompt
+                prompt=problem_prompt,
+                programmer_response=programmer_code
             )
+            
             res3 = moderator.generate_reply(messages=[{"content": moderator_task, "role": "user"}])
-            moderator_summary = res3.get("content", "") if res3 else ""
-            print(f"  Moderator summary: {len(moderator_summary)} chars")
+            moderator_review = res3.get("content", "") if res3 else ""
+            print(f"  Moderator review: {len(moderator_review)} chars")
             
-            # === SKIP LOGIC: Check if revision is needed ===
-            moderator_upper = moderator_summary.upper()
-            code_approved = ("CODE LOOKS CORRECT" in moderator_upper or 
-                           "CORRECT" in moderator_upper or
-                           len(moderator_summary.strip()) < 20)
+            # === TURN 4: Review Board Assessment ===
+            print("Turn 4: Review Board making final assessment...")
+            review_board_task = config.MULTI_AGENT_TASK_REVIEW_BOARD_CODE.format(
+                prompt=problem_prompt,
+                programmer_response=programmer_code,
+                moderator_summary=moderator_review
+            )
             
-            if code_approved:
-                # Skip Turn 4 - use initial code
-                print("  ✓ Code approved by moderator - skipping Turn 4")
-                final_code = initial_code
-                review_assessment = "APPROVED - Skipped review"
-                stats['skipped_review'] += 1
+            res4 = review_board.generate_reply(messages=[{"content": review_board_task, "role": "user"}])
+            review_board_assessment = res4.get("content", "") if res4 else ""
+            review_board_code = extract_code_from_response(review_board_assessment)
+            print(f"  Review Board assessment: {len(review_board_assessment)} chars")
+            
+            # === Determine final code to use ===
+            if review_board_code and 'def' in review_board_code:
+                final_code = review_board_code
+                stats['used_review_board_code'] += 1
+                print(f"  ✓ Using Review Board's code ({len(final_code)} chars)")
             else:
-                # === TURN 4: Review Board Revision ===
-                print("Turn 4: Review Board revising...")
-                review_task = config.MULTI_AGENT_TASK_REVIEW_BOARD_CODE.format(
-                    moderator_summary=moderator_summary,
-                    prompt=problem_prompt,
-                    analyst_findings=analyst_findings,
-                    programmer_response=programmer_response
-                )
-                res4 = review_board.generate_reply(messages=[{"content": review_task, "role": "user"}])
-                review_assessment = res4.get("content", "") if res4 else ""
-                final_code = extract_code_from_response(review_assessment)
-                stats['full_pipeline'] += 1
-                print(f"  Review assessment: {len(review_assessment)} chars")
+                final_code = programmer_code
+                stats['used_programmer_code'] += 1
+                print(f"  ✓ Using Programmer's code ({len(final_code)} chars) - Review Board didn't provide valid code")
             
-            # === Validate Final Code ===
+            # === Check extraction quality ===
             if final_code and 'def' in final_code:
                 stats['successful_extractions'] += 1
-                print(f"  ✓ Code extracted: {len(final_code)} chars")
             else:
                 stats['failed_extractions'] += 1
-                print(f"  ✗ WARNING: No valid function definition found!")
+                print("  ✗ WARNING: No valid function definition found!")
             
-            # === Save Result ===
+            # === Save result ===
             result = {
                 'task_id': task_id,
                 'prompt': problem_prompt,
@@ -248,12 +270,14 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
                 'generated_solution': final_code,
                 'conversation': {
                     'analyst_findings': analyst_findings,
-                    'programmer_response': programmer_response,
-                    'moderator_summary': moderator_summary,
-                    'review_assessment': review_assessment
+                    'programmer_code': programmer_code,
+                    'moderator_review': moderator_review,
+                    'review_board_assessment': review_board_assessment,
+                    'review_board_code': review_board_code
                 },
                 'metadata': {
-                    'review_skipped': code_approved,
+                    'used_code_source': 'review_board' if final_code == review_board_code else 'programmer',
+                    'prompt_type': prompt_type,
                     'timestamp': datetime.now().isoformat()
                 }
             }
@@ -261,21 +285,26 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
             with open(detailed_file, 'a', encoding='utf-8') as f:
                 f.write(json.dumps(result) + '\n')
             
+            # Progress checkpoint
             if (i + 1) % 10 == 0:
-                print(f"\n✓ Progress: {i + 1}/{len(code_samples)} | Success: {stats['successful_extractions']}/{i+1} ({stats['successful_extractions']/(i+1)*100:.1f}%)")
-                print(f"  Skipped: {stats['skipped_review']} | Full pipeline: {stats['full_pipeline']}")
+                print(f"\n✓ Progress checkpoint: {i + 1}/{len(code_samples)} samples completed")
+                print(f"  Success rate: {stats['successful_extractions']}/{i+1} ({stats['successful_extractions']/(i+1)*100:.1f}%)")
+                print(f"  Using Review Board code: {stats['used_review_board_code']}")
+                print(f"  Using Programmer code: {stats['used_programmer_code']}")
     
     finally:
         emissions = tracker.stop()
         stats['emissions_kg_co2'] = emissions
         
         print(f"\n{'='*60}")
-        print("MULTI-AGENT GENERATION COMPLETED")
+        print("MULTI-AGENT CODE GENERATION COMPLETED")
         print(f"{'='*60}")
-        print(f"Total: {stats['total_samples']}")
-        print(f"Success: {stats['successful_extractions']} ({stats['successful_extractions']/stats['total_samples']*100:.1f}%)")
-        print(f"Skipped Turn 4: {stats['skipped_review']}")
-        print(f"Full pipeline: {stats['full_pipeline']}")
+        print(f"Total samples: {stats['total_samples']}")
+        print(f"Successful extractions: {stats['successful_extractions']} ({stats['successful_extractions']/stats['total_samples']*100:.1f}%)")
+        print(f"Failed extractions: {stats['failed_extractions']}")
+        print(f"Used programmer code: {stats['used_programmer_code']} ({stats['used_programmer_code']/stats['total_samples']*100:.1f}%)")
+        print(f"Used review board code: {stats['used_review_board_code']} ({stats['used_review_board_code']/stats['total_samples']*100:.1f}%)")
+        print(f"Prompt type: {stats['prompt_type']}")
         print(f"Emissions: {emissions:.6f} kg CO2")
         
         with open(summary_file, 'w', encoding='utf-8') as f:
@@ -283,31 +312,50 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
     
     return detailed_file
 
+
 # --- Main Execution ---
 def main():
     print("\n" + "="*60)
-    print("MULTI-AGENT CODE GENERATION (OPTIMIZED)")
+    print(f"MULTI-AGENT CODE GENERATION - {args.prompt_type.upper()}")
     print("="*60)
     
+    # Load dataset
     code_samples = read_code_generation_data(DATASET_FILE)
     
+    # Select appropriate system prompts based on prompt_type
+    sys_prompts = {}
+    if args.prompt_type == 'zero_shot':
+        sys_prompts["analyst"] = config.SYS_MSG_REQUIREMENTS_ANALYST_ZERO_SHOT
+        sys_prompts["programmer"] = config.SYS_MSG_PROGRAMMER_MA_ZERO_SHOT
+        sys_prompts["moderator"] = config.SYS_MSG_MODERATOR_CODE_ZERO_SHOT
+        sys_prompts["review_board"] = config.SYS_MSG_REVIEW_BOARD_CODE_ZERO_SHOT
+    else:  # few_shot
+        sys_prompts["analyst"] = config.SYS_MSG_REQUIREMENTS_ANALYST
+        sys_prompts["programmer"] = config.SYS_MSG_PROGRAMMER_MA
+        sys_prompts["moderator"] = config.SYS_MSG_MODERATOR_CODE
+        sys_prompts["review_board"] = config.SYS_MSG_REVIEW_BOARD_CODE
+    
+    # Run inference
     print(f"\nRunning {DESIGN} multi-agent code generation...")
     detailed_file = run_inference_with_emissions(
         code_samples,
         llm_config,
+        sys_prompts,
         exp_name,
-        RESULT_DIR
+        RESULT_DIR,
+        args.prompt_type
     )
     
     print(f"\nResults saved to: {detailed_file}")
     
+    # Run evaluation
     print("\n" + "="*60)
     print("STARTING EVALUATION")
     print("="*60)
     
     try:
         eval_result = subprocess.run(
-            ["python", "evaluate_code_generation.py", detailed_file],
+            ["python", "src/evaluate_code_generation.py", detailed_file],
             capture_output=True,
             text=True,
             timeout=600
@@ -328,7 +376,7 @@ def main():
     except Exception as e:
         print(f"Failed to run evaluation: {e}")
         print(f"You can manually evaluate by running:")
-        print(f"python evaluate_code_generation.py {detailed_file}")
+        print(f"python src/evaluate_code_generation.py {detailed_file}")
 
 
 if __name__ == "__main__":
