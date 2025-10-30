@@ -7,7 +7,7 @@ WORK_DIR = f'{PROJECT_ROOT}/tests/work_dir'
 RESULT_DIR = f'{PROJECT_ROOT}/results'
 PLOT_DIR = f'{PROJECT_ROOT}/plots'
 
-
+"""
 IN_FILE = "mlcq_cleaned_and_pruned_dataset_385.csv"
 GT_FILE = "mlcq_cleaned_and_pruned_dataset_385.csv"
 # Task and design settings
@@ -21,8 +21,8 @@ GT_FILE = "HDFS_385_sampled_log_structured_corrected.csv"
 # Task and design settings
 #TASK = "log-parsing" # options: "log-parsing", "log-analysis", "code-generation", "vul-detection", "td-detection"
 TASK = "log-parsing"
-DESIGN = "SA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
-"""
+DESIGN = "DA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
+
 
 VULN_DATASET = f"{PROJECT_ROOT}/vuln_database/VulTrial_386_samples_balanced.jsonl"
 HUMANEVAL_DATASET = f"{PROJECT_ROOT}/vuln_database/HumanEval.jsonl"
@@ -56,62 +56,14 @@ TASK_PROMPT = """Look at the following log message and print the template corres
 
 TASK_PROMPT_LOG_PARSING = """Look at the following log message and print the template corresponding to the log message:\n"""
 
-SYS_MSG_SINGLE_LOG_PARSER_FEW_SHOT = """
-        You analyze a log message and determine the appropriate parameters for the LogParserAgent.
-        The log texts describe various system events in a software system.
-        A log message usually contains a header that is automatically
-        produced by the logging framework, including information such as
-        timestamp, class, and logging level (INFO, DEBUG, WARN etc.).
-        The log message typically consists of two parts:
-        1. Template - message body, that contains constant strings (or keywords) describing the system events;
-        2. Parameters/Variables - dynamic variables, which reflect specific runtime status.
-        You must identify and abstract all the dynamic variables in the log
-        message with suitable placeholders inside angle brackets to extract
-        the corresponding template.
-        You must output the template corresponding to the log message.
-        Print only the input log's template.
-        Never print an explanation of how the template is constructed.
-
-        Here are a few examples of log messages and their corresponding templates:
-        081109 204453 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.250.11.85:50010 is added to blk_2377150260128098806 size 67108864
-        BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
-        
-        081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
-        Receiving block <*> src: <*>:<*> dest: <*>:<*>
-
-        081110 060453 7193 INFO dfs.DataNode$DataXceiver: 10.251.199.225:50010 Served block blk_8457344665564381337 to /10.251.199.225
-        <*>:<*> Served block <*> to <*>
-        """
-
-SYS_MSG_SINGLE_LOG_PARSER_ZERO_SHOT = """
-        You analyze a log message and determine the appropriate parameters for the LogParserAgent.
-        The log texts describe various system events in a software system.
-        A log message usually contains a header that is automatically
-        produced by the logging framework, including information such as
-        timestamp, class, and logging level (INFO, DEBUG, WARN etc.).
-        The log message typically consists of two parts:
-        1. Template - message body, that contains constant strings (or keywords) describing the system events;
-        2. Parameters/Variables - dynamic variables, which reflect specific runtime status.
-        You must identify and abstract all the dynamic variables in the log
-        message with suitable placeholders inside angle brackets to extract
-        the corresponding template.
-        You must output the template corresponding to the log message.
-        Print only the input log's template.
-        Never print an explanation of how the template is constructed.
-        """
-
 SYS_MSG_LOG_PARSER_GENERATOR_FEW_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
         The log texts describe various system events in a software system.
-        A log message usually contains a header that is automatically
-        produced by the logging framework, including information such as
-        timestamp, class, and logging level (INFO, DEBUG, WARN etc.). 
+        A log message usually contains a header that is automatically produced by the logging framework, including information such as timestamp, class, and logging level (INFO, DEBUG, WARN etc.). 
         The log message typically consists of two parts:
         1. Template - message body, that contains constant strings (or keywords) describing the system events;
         2. Parameters/Variables - dynamic variables, which reflect specific runtime status.
-        You must identify and abstract all the dynamic variables in the log
-        message with suitable placeholders inside angle brackets to extract
-        the corresponding template.
+        You must identify and abstract all the dynamic variables in the log message with suitable placeholders inside angle brackets to extract the corresponding template.
         You must output the template corresponding to the log message.
         Never provide any extra information or feedback to the other agents.
         Never print an explanation of how the template is constructed.
@@ -131,15 +83,11 @@ SYS_MSG_LOG_PARSER_GENERATOR_FEW_SHOT = """
 SYS_MSG_LOG_PARSER_GENERATOR_ZERO_SHOT = """
         You analyze a log message and determine the appropriate parameters for the LogParserAgent.
         The log texts describe various system events in a software system.
-        A log message usually contains a header that is automatically
-        produced by the logging framework, including information such as
-        timestamp, class, and logging level (INFO, DEBUG, WARN etc.). 
+        A log message usually contains a header that is automatically produced by the logging framework, including information such as timestamp, class, and logging level (INFO, DEBUG, WARN etc.). 
         The log message typically consists of two parts:
         1. Template - message body, that contains constant strings (or keywords) describing the system events;
         2. Parameters/Variables - dynamic variables, which reflect specific runtime status.
-        You must identify and abstract all the dynamic variables in the log
-        message with suitable placeholders inside angle brackets to extract
-        the corresponding template.
+        You must identify and abstract all the dynamic variables in the log message with suitable placeholders inside angle brackets to extract the corresponding template.
         You must output the template corresponding to the log message.
         Never provide any extra information or feedback to the other agents.
         Never print an explanation of how the template is constructed.
@@ -147,30 +95,55 @@ SYS_MSG_LOG_PARSER_GENERATOR_ZERO_SHOT = """
         """
 
 SYS_MSG_LOG_PARSER_CRITIC_FEW_SHOT = """
-                You are a critic reviewing the work of the log_parser_agent.
-                Your task is to provide constructive feedback to improve the correctness of the extracted log template. 
-                The template should abstract all dynamic variables in the log message, replacing them with appropriate placeholders enclosed in angle brackets (<*>).
-                If the template is incorrect, provide feedback on how to improve it.
-                If the template is correct, do not provide any suggestions, and do not even print the correct template again.
-                
-                Here are a few examples of log messages and their corresponding templates:
-                081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
-                BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
-                
-                081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
-                Receiving block <*> src: <*>:<*> dest: <*>:<*>
+            You are a Log Parser Critic. 
+            You will be shown an original log message and a template produced by the log_parser_agent.
 
-                081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
-                PacketResponder <*> for block <*> terminating
-                """
+            Your task:
+            1. Verify whether the provided template correctly represents the log **message body**, excluding the header (timestamp, log level, class name, etc.).
+            2. Ensure that all variable parts in the message body (e.g., IPs, ports, IDs, paths, numbers) are replaced with the <*> placeholder.
+            3. If the template is correct, return it exactly as-is.
+            4. If it is incorrect, fix it and output the corrected template only.
+            5. Preserve all constant text, punctuation, and structure from the message body.
+
+            Output rules:
+            - Output only the final, corrected template (one line only).
+            - Do not output explanations, reasoning, or any additional text.
+            - Use only <*> as the placeholder format, no named placeholders.
+
+            Examples (for reference only):
+            Example 1:
+                ORIGINAL_LOG_MESSAGE: 081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+                PROVIDED_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+                EXPECTED OUTPUT: BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
+
+            Example 2:
+                ORIGINAL_LOG_MESSAGE: 081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
+                PROVIDED_TEMPLATE: Receiving block blk_<*> src: <*>:<*> dest: <*>:<*>
+                EXPECTED OUTPUT: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+
+            Example 3:
+                ORIGINAL_LOG_MESSAGE: 081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+                PROVIDED_TEMPLATE: PacketResponder 1 for block blk_* terminating
+                EXPECTED OUTPUT: PacketResponder <*> for block <*> terminating
+            """
+
 
 SYS_MSG_LOG_PARSER_CRITIC_ZERO_SHOT = """
-                You are a critic reviewing the work of the log_parser_agent.
-                Your task is to provide constructive feedback to improve the correctness of the extracted log template. 
-                The template should abstract all dynamic variables in the log message, replacing them with appropriate placeholders enclosed in angle brackets (<*>).
-                If the template is incorrect, provide feedback on how to improve it.
-                If the template is correct, do not provide any suggestions, and do not even print the correct template again.
-                """
+            You are a Log Parser Critic. 
+            You will be shown an original log message and a template produced by the log_parser_agent.
+
+            Your task:
+            1. Verify whether the provided template correctly represents the log **message body**, excluding the header (timestamp, log level, class name, etc.).
+            2. Ensure that all variable parts in the message body (e.g., IPs, ports, IDs, paths, numbers) are replaced with the <*> placeholder.
+            3. If the template is correct, return it exactly as-is.
+            4. If it is incorrect, fix it and output the corrected template only.
+            5. Preserve all constant text, punctuation, and structure from the message body.
+
+            Output rules:
+            - Output only the final, corrected template (one line only).
+            - Do not output explanations, reasoning, or any additional text.
+            - Use only <*> as the placeholder format, no named placeholders.
+            """
 
 SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_FEW_SHOT = """
         You are a comparator and refiner. You receive a log message and two extracted templates:
@@ -213,61 +186,68 @@ SYS_MSG_LOG_PARSER_COMPARATOR_REFINER_ZERO_SHOT = """
         """
 
 SYS_MSG_LOG_PARSER_REFINER_ZERO_SHOT = """
-    You are a Log Parser Refiner. You will be given:
-    ORIGINAL_LOG: the full raw log line
-    PARSER_TEMPLATE: the template produced by the log_parser_agent
-    CRITIC_FEEDBACK: either APPROVED, REJECTED|<hint>|<reason>, or empty (if no critic) produced by the log_parser_critic_agent
+        You are a Log Parser Refiner.
 
-    Your job:
-    1) Verify and, if necessary, improve PARSER_TEMPLATE so it accurately abstracts all dynamic values shown in ORIGINAL_LOG.
-    2) Use CRITIC_FEEDBACK as an optional hint: if it starts with REJECTED and contains a <hint>, prefer that hint to fix the template.
-    3) Preserve constant text and punctuation exactly as in the log template part.
-    4) Replace every dynamic value (IPs, ports, timestamps, block IDs, file paths, numbers, UUIDs, etc.) with the generic placeholder <*>.
-        - If PARSER_TEMPLATE contains named placeholders (e.g. <ip>, <user_id>) or raw values, convert them to <*>.
-    5) Minimize changes — if PARSER_TEMPLATE is already correct, return it unchanged.
+        You will be given:
+        - ORIGINAL_LOG: the full raw log line (including header and message body)
+        - PARSER_TEMPLATE: the template produced by the log_parser_agent
+        - CRITIC_TEMPLATE: the template produced by the log_parser_critic_agent (may be identical or corrected)
 
-    Output rules:
-    - Print exactly one line containing ONLY the FINAL_REFIND_TEMPLATE (no extra label, text, explanation, or comments).
-    - Do NOT use named placeholders; use only <*>.
-    - If you cannot extract a template, print exactly: UNABLE_TO_EXTRACT
+        Your task:
+        1. Focus only on the message body of the log (ignore header parts such as timestamp, log level, and class name).
+        2. Compare PARSER_TEMPLATE and CRITIC_TEMPLATE, and produce the final best version.
+        3. The final template must accurately represent the constant structure of the message body, with all variable elements (IPs, ports, IDs, numbers, paths, etc.) replaced by <*>.
+        4. Preserve all fixed text, punctuation, and message structure exactly as in the log.
+        5. If both templates are correct and identical, return either one unchanged.
+        6. If one is more complete or accurate, output the improved version.
+
+        Output rules:
+        - Output exactly one line containing ONLY the final refined template (no labels, explanations, or extra text).
+        - Use only <*> as placeholders (no named placeholders).
+        - If the message body cannot be reliably extracted or abstracted, output exactly: UNABLE_TO_EXTRACT
+
 """
 
 SYS_MSG_LOG_PARSER_REFINER_FEW_SHOT = """
-    You are a Log Parser Refiner. You will be given:
-    ORIGINAL_LOG: the full raw log line
-    PARSER_TEMPLATE: the template produced by the log_parser_agent
-    CRITIC_FEEDBACK: either APPROVED, REJECTED|<hint>|<reason>, or empty (if no critic) produced by the log_parser_critic_agent
+        You are a Log Parser Refiner.
 
-    Your job:
-    1) Verify and, if necessary, improve PARSER_TEMPLATE so it accurately abstracts all dynamic values shown in ORIGINAL_LOG.
-    2) Use CRITIC_FEEDBACK as an optional hint: if it starts with REJECTED and contains a <hint>, prefer that hint to fix the template.
-    3) Preserve constant text and punctuation exactly as in the log template part.
-    4) Replace every dynamic value (IPs, ports, timestamps, block IDs, file paths, numbers, UUIDs, etc.) with the generic placeholder <*>.
-        - If PARSER_TEMPLATE contains named placeholders (e.g. <ip>, <user_id>) or raw values, convert them to <*>.
-    5) Minimize changes — if PARSER_TEMPLATE is already correct, return it unchanged.
+        You will be given:
+        - ORIGINAL_LOG: the full raw log line (including header and message body)
+        - PARSER_TEMPLATE: the template produced by the log_parser_agent
+        - CRITIC_TEMPLATE: the template produced by the log_parser_critic_agent (may be identical or corrected)
 
-    Output rules:
-    - Print exactly one line containing ONLY the FINAL_REFIND_TEMPLATE (no extra label, text, explanation, or comments).
-    - Do NOT use named placeholders; use only <*>.
-    - If you cannot extract a template, print exactly: UNABLE_TO_EXTRACT
+        Your task:
+        1. Focus only on the message body of the log (ignore header parts such as timestamp, log level, and class name).
+        2. Compare PARSER_TEMPLATE and CRITIC_TEMPLATE, and produce the final best version.
+        3. The final template must accurately represent the constant structure of the message body, with all variable elements (IPs, ports, IDs, numbers, paths, etc.) replaced by <*>.
+        4. Preserve all fixed text, punctuation, and message structure exactly as in the log.
+        5. If both templates are correct and identical, return either one unchanged.
+        6. If one is more complete or accurate, output the improved version.
 
-    Examples (for reference, do not print these):
-    Example 1:
-        ORIGINAL_LOG: 081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
-        PARSER_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
-        CRITIC_FEEDBACK: REJECTED|BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>|Parser left raw IP and numeric values unabstracted
-        EXPECTED OUTPUT: BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
-    Example 2:
-        ORIGINAL_LOG: 081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
-        PARSER_TEMPLATE: Receiving block <*> src: <*>:<*> dest: <*>:<*>
-        CRITIC_FEEDBACK: APPROVED
-        EXPECTED OUTPUT: Receiving block <*> src: <*>:<*> dest: <*>:<*>
-    Example 3:
-        ORIGINAL_LOG: 081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
-        PARSER_TEMPLATE: PacketResponder 1 for block blk_38865049064139660 terminating
-        CRITIC_FEEDBACK: REJECTED|PacketResponder <*> for block <*> terminating|Parser left raw numeric and block values unabstracted
-        EXPECTED OUTPUT: PacketResponder <*> for block <*> terminating
-"""
+        Output rules:
+        - Output exactly one line containing ONLY the final refined template (no labels, explanations, or extra text).
+        - Use only <*> as placeholders (no named placeholders).
+        - If the message body cannot be reliably extracted or abstracted, output exactly: UNABLE_TO_EXTRACT
+
+        Examples (for reference only):
+        Example 1:
+            ORIGINAL_LOG: 081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+            PARSER_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+            CRITIC_TEMPLATE: BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
+            EXPECTED OUTPUT: BLOCK* NameSystem.addStoredBlock: blockMap updated: <*>:<*> is added to <*> size <*>
+
+        Example 2:
+            ORIGINAL_LOG: 081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
+            PARSER_TEMPLATE: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+            CRITIC_TEMPLATE: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+            EXPECTED OUTPUT: Receiving block <*> src: <*>:<*> dest: <*>:<*>
+
+        Example 3:
+            ORIGINAL_LOG: 081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+            PARSER_TEMPLATE: PacketResponder 1 for block blk_* terminating
+            CRITIC_TEMPLATE: PacketResponder <*> for block blk_<*> terminating
+            EXPECTED OUTPUT: PacketResponder <*> for block <*> terminating
+    """
 
 
 # ========================================================================================
