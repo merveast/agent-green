@@ -106,31 +106,43 @@ python script/multi_agent_vuln_detection_four_agents.py --prompt_type zero_shot
 
 ## How to run Code Generation scripts
 
+
+If you have multiple GPUs, specify which GPU to use (e.g. CUDA_VISIBLE_DEVICES=1).
+Otherwise, just run the command directly.
+
 No Agent Usage 
 
 ```
-python script/no_agent_code_generation.py
+python script/no_agent_code_generation.py prompt_type few_shot   # run with few-shot
+python script/no_agent_code_generation.py prompt_type zero_shot   # run with zero-shot
+
+```
+or 
+```
+# With specific GPU (example: GPU 1)
+CUDA_VISIBLE_DEVICES=1 python script/no_agent_code_generation.py prompt_type few_shot   # run with few-shot
 
 ```
 
 Single Agent Usage
 ```
-python script/single_agent_code_generation.py SA-few    # run with few-shot
-python script/single_agent_code_generation.py SA-zero   # run with zero-shot
+python script/single_agent_code_generation.py prompt_type few_shot   # run with few-shot
+python script/single_agent_code_generation.py prompt_type zero_shot   # run with zero-shot
 
 ```
 
 Dual Agent Usage 
 ```
-python script/dual_agent_code_generation.py
+python script/dual_agent_code_generation.py prompt_type few_shot
+python script/dual_agent_code_generation.py prompt_type zero_shot
 
 ```
 
 Multi Agent Usage
 ```
-python script/multi_agent_code_generation.py
+python script/multi_agent_code_generation.py --prompt_type few_shot
+python script/multi_agent_code_generation.py --prompt_type zero_shot
 
-```
 
 ## How to run Log Parsing experiments
 

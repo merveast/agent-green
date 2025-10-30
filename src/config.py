@@ -951,6 +951,363 @@ Code Author Response:
 
 
 
+# =======================================================================
+# Code Generation Prompts (SINGLE, DUAL, MULTI-AGENT)
+# =======================================================================
+
+# =======================================================================
+# EXAMPLES (Used in few-shot prompts)
+# =======================================================================
+
+EXAMPLE_1_HAS_CLOSE_ELEMENTS = """Problem:
+```python
+def has_close_elements(numbers: List[float], threshold: float) -> bool:
+    ''' Check if in given list of numbers, are any two numbers closer to each other than
+    given threshold.
+    >>> has_close_elements([1.0, 2.0, 3.0], 0.5)
+    False
+    >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)
+    True
+    '''
+```
+Implementation: Let\'s think step-by-step. I need to compare every pair of numbers in the list and check if their absolute difference is less than the threshold.
+```python
+def has_close_elements(numbers: List[float], threshold: float) -> bool:
+    for i in range(len(numbers)):
+        for j in range(i + 1, len(numbers)):
+            if abs(numbers[i] - numbers[j]) < threshold:
+                return True
+    return False
+```
+"""
+
+EXAMPLE_2_SEPARATE_PAREN_GROUPS = """Problem:
+```python
+def separate_paren_groups(paren_string: str) -> List[str]:
+    ''' Input to this function is a string containing multiple groups of nested parentheses. Your goal is to
+    separate those groups into separate strings and return the list of those.
+    Separate groups are balanced (each open brace is properly closed) and not nested within each other.
+    Ignore any spaces in the input string.
+    >>> separate_paren_groups('( ) (( )) (( )( ))')
+    ['()', '(())', '(()())']
+    '''
+```
+Implementation: Let\'s think step-by-step. I need to track the depth of parentheses and collect characters for each group. When depth returns to 0, I have a complete group.
+```python
+def separate_paren_groups(paren_string: str) -> List[str]:
+    result = []
+    current_string = []
+    current_depth = 0
+
+    for c in paren_string:
+        if c == '(':
+            current_depth += 1
+            current_string.append(c)
+        elif c == ')':
+            current_depth -= 1
+            current_string.append(c)
+
+            if current_depth == 0:
+                result.append(''.join(current_string))
+                current_string = []
+
+    return result
+```
+"""
+
+EXAMPLE_3_TRUNCATE_NUMBER = """Problem:
+```python
+def truncate_number(number: float) -> float:
+    ''' Given a positive floating point number, it can be decomposed into
+    an integer part (largest integer smaller than given number) and decimals
+    (leftover part always smaller than 1).
+
+    Return the decimal part of the number.
+    >>> truncate_number(3.5)
+    0.5
+    '''
+```
+Implementation: Let\'s think step-by-step. I need to extract just the decimal part of a number. The modulo operator with 1.0 will give me the fractional part.
+```python
+def truncate_number(number: float) -> float:
+    return number % 1.0
+```
+"""
+
+FEW_SHOT_EXAMPLES = f"""Example 1:
+{EXAMPLE_1_HAS_CLOSE_ELEMENTS}
+
+Example 2:
+{EXAMPLE_2_SEPARATE_PAREN_GROUPS}
+
+Example 3:
+{EXAMPLE_3_TRUNCATE_NUMBER}
+"""
+
+
+# =======================================================================
+# SINGLE-AGENT PROMPTS
+# =======================================================================
+
+SYS_MSG_CODE_GENERATOR_ZERO_SHOT = """You are an expert Python programmer that is good at implementing functions based on their specifications."""
+
+SYS_MSG_CODE_GENERATOR_FEW_SHOT = f"""You are an expert Python programmer skilled in implementing functions based on their specifications.
+
+Use these canonical examples as reference:
+
+{FEW_SHOT_EXAMPLES}
+
+Now, implement the given function accurately and efficiently.
+"""
+
+SINGLE_AGENT_TASK_CODE_GENERATION = """Please analyze the following programming problem and implement the required function:
+
+{prompt}
+
+Please provide your complete function implementation. Make sure to:
+- Follow the exact function signature
+- Implement the logic described in the docstring
+- Handle all specified requirements and edge cases
+- Return the correct data type
+
+Let\'s think step-by-step.
+"""
+
+
+# =======================================================================
+# DUAL-AGENT PROMPTS (Programmer → Reviewer)
+# =======================================================================
+
+# ================================================================
+# PROGRAMMER (Code Author)
+# ================================================================
+
+SYS_MSG_PROGRAMMER_ZERO_SHOT = """You are an expert Python programmer.
+Implement the given function according to its specification.
+Focus on correctness, completeness, and proper imports.
+Output only valid Python code.
+"""
+
+SYS_MSG_PROGRAMMER_FEW_SHOT = f"""You are an expert Python programmer who writes fully correct and efficient code on the first attempt.
+
+Follow these few-shot examples and replicate their reasoning and structure:
+{FEW_SHOT_EXAMPLES}
+
+Guidelines:
+1. Always include all required imports (e.g., List, Tuple, Optional from typing).
+2. Handle all edge cases correctly.
+3. Focus on logic and correctness over style.
+4. Write only Python code, no explanation.
+"""
+
+DUAL_AGENT_TASK_CODE_GENERATION = """Implement the following function based on its problem statement:
+
+{prompt}
+
+Provide the complete Python function implementation only.
+"""
+
+
+# ================================================================
+# REVIEWER (Code Reviewer)
+# ================================================================
+
+SYS_MSG_CODE_REVIEWER_ZERO_SHOT = """You are a senior code reviewer and refiner.
+Given a problem description and an initial implementation, produce a final corrected version.
+
+If the original code is already correct, return it unchanged.
+If there are errors or missing imports, fix them.
+Focus strictly on correctness and completeness.
+
+Output only valid Python code.
+"""
+
+SYS_MSG_CODE_REVIEWER_FEW_SHOT = f"""You are a senior code reviewer and refiner.
+Given a problem statement and initial code, produce the final corrected implementation.
+
+Follow these rules:
+1. If the code is correct, output it unchanged.
+2. If imports are missing, add them.
+3. Fix logical or syntax issues only — do not rewrite style.
+4. Return Python code only, nothing else.
+
+Example correction pattern:
+Input:
+```python
+def add(a,b):
+    return a-b
+```
+
+Output:
+```python
+def add(a,b):
+    return a+b
+```
+
+Output only valid Python code.
+"""
+
+DUAL_AGENT_TASK_CODE_REVIEW = """Review and refine the following implementation:
+
+Problem:
+{prompt}
+
+Initial Code:
+```python
+{generated_code}
+```
+
+If the code is correct, return it unchanged.
+If you find any issue, fix it and return the corrected version.
+
+Output only Python code.
+"""
+
+
+# =======================================================================
+# MULTI-AGENT PROMPTS (Analyst → Programmer → Moderator → Review Board)
+# =======================================================================
+
+# ================================================================
+# REQUIREMENTS ANALYST
+# ================================================================
+
+SYS_MSG_REQUIREMENTS_ANALYST_ZERO_SHOT = """You are a Python requirements analyst. Identify 3–5 key requirements or challenges for solving the given problem."""
+
+SYS_MSG_REQUIREMENTS_ANALYST = f"""You are a Python requirements analyst. Identify key requirements and challenges from function specifications.
+
+Example analyses (based on canonical examples):
+
+{FEW_SHOT_EXAMPLES}
+
+1. For comparing elements in a list: compare pairs and return True early.
+2. For nested structures: track depth and detect completion when depth returns to zero.
+3. For numeric transformations: extract fractional parts accurately.
+
+Now analyze the given problem.
+"""
+
+MULTI_AGENT_TASK_ANALYST = """Analyze the following programming problem:
+
+{prompt}
+
+List the main requirements and challenges in 3–5 concise bullet points."""
+
+MULTI_AGENT_TASK_REQUIREMENTS_ANALYST_ZERO_SHOT = """Analyze the following programming problem:
+
+{prompt}
+
+List the main requirements and challenges in 3–5 concise bullet points."""
+
+
+# ================================================================
+# PROGRAMMER
+# ================================================================
+
+SYS_MSG_PROGRAMMER_MA_ZERO_SHOT = """You are an expert Python programmer. Write clean, correct Python code that fully satisfies the specification.
+Always include necessary imports for any type annotations and handle all edge cases correctly."""
+
+SYS_MSG_PROGRAMMER_MA = f"""You are an expert Python programmer who writes correct and efficient code on the first try.
+
+Follow the canonical examples below:
+
+{FEW_SHOT_EXAMPLES}
+
+Guidelines:
+1. ALWAYS include all necessary imports (typing, math, etc.)
+2. If using List, Tuple, Optional, etc., import them from typing.
+3. Handle all edge cases correctly.
+4. Focus on correctness over stylistic preferences.
+"""
+
+MULTI_AGENT_TASK_PROGRAMMER = """Based on this requirements analysis:
+{analyst_findings}
+
+Implement the following function:
+{prompt}
+
+Include all necessary imports and handle all edge cases.
+
+Provide complete working Python code."""
+
+MULTI_AGENT_TASK_PROGRAMMER_ZERO_SHOT = """Based on this requirements analysis:
+{analyst_findings}
+
+Implement the following function:
+{prompt}
+
+Include all necessary imports and handle all edge cases.
+
+Provide complete working Python code."""
+
+
+# ================================================================
+# MODERATOR
+# ================================================================
+
+SYS_MSG_MODERATOR_CODE_ZERO_SHOT = """You are a code moderator. Check correctness and completeness, focusing only on logic, imports, and edge cases."""
+
+SYS_MSG_MODERATOR_CODE = f"""You are a code moderator. Review the generated code for correctness and potential test failures.
+
+When reviewing code:
+1. Check all necessary imports (especially typing imports like List, Tuple, etc.)
+2. Mark as BUG if imports required by annotations are missing
+3. For code WITH ALL IMPORTS, check if it works for all valid inputs
+4. Be lenient about algorithmic differences
+5. Ignore style; focus only on correctness
+
+Reference these canonical implementations for guidance:
+
+{FEW_SHOT_EXAMPLES}
+"""
+
+MULTI_AGENT_TASK_MODERATOR_CODE = """Review this implementation:
+
+Problem:
+{prompt}
+
+Code:
+```python
+{programmer_response}
+```
+
+Check for:
+1. Missing imports
+2. Requirement coverage
+3. Logical correctness
+
+State whether the code is correct or contains bugs, and explain briefly."""
+
+
+# ================================================================
+# REVIEW BOARD
+# ================================================================
+
+SYS_MSG_REVIEW_BOARD_CODE_ZERO_SHOT = """You are the review board. Provide the final verdict and corrected implementation, ensuring all requirements and imports are covered."""
+
+SYS_MSG_REVIEW_BOARD_CODE = f"""You are a review board member providing the final decision on correctness and completeness.
+
+When finalizing code:
+1. Ensure all imports are included (especially typing imports)
+2. Fix any issues from moderator feedback
+3. Provide a fully correct, working implementation
+
+Reference these canonical implementations for guidance:
+
+{FEW_SHOT_EXAMPLES}
+"""
+
+MULTI_AGENT_TASK_REVIEW_BOARD_CODE = """Provide the final assessment and corrected implementation:
+
+Problem:
+{prompt}
+
+Moderator feedback:
+{moderator_summary}
+
+Ensure all imports and requirements are included.
+
+Provide the FINAL IMPLEMENTATION."""
 
 
 

@@ -2,37 +2,43 @@ import os
 import json
 import time
 import config
+import sys
+import subprocess
+import argparse
 from datetime import datetime
 from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
-import sys
-import subprocess
+
+# --- Parse Command Line Arguments ---
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Single Agent Code Generation")
+    
+    # Add prompt_type argument
+    parser.add_argument(
+        "--prompt_type",
+        type=str,
+        choices=["zero_shot", "few_shot"],
+        default="zero_shot",
+        help="Prompt type: zero_shot or few_shot (default: zero_shot)"
+    )
+    
+    return parser.parse_args()
+
+# Parse arguments
+args = parse_arguments()
 
 # --- Configuration ---
 llm_config = config.LLM_CONFIG
-task = config.CODE_GENERATION_TASK_PROMPT
-sys_prompt_few_shot = config.SYS_MSG_CODE_GENERATOR_FEW_SHOT
-sys_prompt_zero_shot = config.SYS_MSG_CODE_GENERATOR_ZERO_SHOT
-
 DATASET_FILE = config.HUMANEVAL_DATASET
 RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-# Parse command line arguments
-if len(sys.argv) > 1:
-    DESIGN = sys.argv[1]
-    if DESIGN not in ["SA-zero", "SA-few"]:
-        print(f"Error: Invalid design '{DESIGN}'. Must be 'SA-zero' or 'SA-few'")
-        sys.exit(1)
-else:
-    print("Usage: python single_agent_code_generation.py <design>")
-    print("design: SA-zero or SA-few")
-    sys.exit(1)
+# Map prompt_type to design name
+DESIGN = f"SA-{'few' if args.prompt_type == 'few_shot' else 'zero'}"
 
 model = llm_config["config_list"][0]["model"].replace(":", "-")
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-project_name = DESIGN.capitalize()
-exp_name = f"{project_name}_{model}_{timestamp}"
+exp_name = f"{DESIGN}_{model}_{timestamp}"
 
 # --- Agent Creation ---
 def create_code_generator_agent(llm_config, sys_prompt):
@@ -165,12 +171,12 @@ def run_inference_with_emissions(code_samples, llm_config, sys_prompt, task, exp
 # --- Main Execution ---
 time.sleep(1)  # Brief initialization pause
 
-# Select system prompt based on design
-if DESIGN == "SA-few":
-    sys_prompt = sys_prompt_few_shot
+# Select system prompt based on prompt type
+if args.prompt_type == "few_shot":
+    sys_prompt = config.SYS_MSG_CODE_GENERATOR_FEW_SHOT
     print("Using few-shot system prompt")
-else:
-    sys_prompt = sys_prompt_zero_shot
+else:  # zero_shot
+    sys_prompt = config.SYS_MSG_CODE_GENERATOR_ZERO_SHOT
     print("Using zero-shot system prompt")
 
 print(f"Running {DESIGN} code generation...")
@@ -178,7 +184,7 @@ detailed_file = run_inference_with_emissions(
     code_samples, 
     llm_config, 
     sys_prompt, 
-    task, 
+    config.SINGLE_AGENT_TASK_CODE_GENERATION, 
     exp_name, 
     RESULT_DIR
 )
@@ -214,3 +220,7 @@ except Exception as e:
     print(f"Failed to run evaluation: {e}")
     print("You can manually evaluate by running:")
     print(f"python evaluate_code_generation.py {detailed_file}")
+    
+    
+    
+    

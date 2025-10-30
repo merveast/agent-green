@@ -2,10 +2,30 @@ import os
 import json
 import time
 import config
-from datetime import datetime
-from codecarbon import OfflineEmissionsTracker
-import requests
+import sys
 import subprocess
+import argparse
+from datetime import datetime
+from autogen import AssistantAgent
+from codecarbon import OfflineEmissionsTracker
+
+# --- Parse Command Line Arguments ---
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Single Agent Code Generation")
+    
+    # Add prompt_type argument
+    parser.add_argument(
+        "--prompt_type",
+        type=str,
+        choices=["zero_shot", "few_shot"],
+        default="zero_shot",
+        help="Prompt type: zero_shot or few_shot (default: zero_shot)"
+    )
+    
+    return parser.parse_args()
+
+# Parse arguments
+args = parse_arguments()
 
 # --- Configuration ---
 llm_config = config.LLM_CONFIG
@@ -13,11 +33,22 @@ DATASET_FILE = config.HUMANEVAL_DATASET
 RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-DESIGN = "no-agent"
+# Map prompt_type to design name
+DESIGN = f"SA-{'few' if args.prompt_type == 'few_shot' else 'zero'}"
+
 model = llm_config["config_list"][0]["model"].replace(":", "-")
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-project_name = DESIGN.capitalize()
-exp_name = f"{project_name}_{model}_{timestamp}"
+exp_name = f"{DESIGN}_{model}_{timestamp}"
+
+# --- Agent Creation ---
+def create_code_generator_agent(llm_config, sys_prompt):
+    return AssistantAgent(
+        name="code_generator_agent",
+        system_message=sys_prompt,
+        description="Generate Python code solutions.",
+        llm_config=llm_config,
+        human_input_mode="NEVER",
+    )
 
 # --- Data Reading ---
 def read_code_generation_data(dataset_path):
@@ -35,29 +66,6 @@ code_samples = read_code_generation_data(DATASET_FILE)
 print(f"Loaded {len(code_samples)} code samples")
 
 # --- Helper Functions ---
-def generate_code_with_ollama(prompt, model_name, api_base):
-    """Call Ollama API directly without agents"""
-    url = f"{api_base}/v1/chat/completions"
-    
-    payload = {
-        "model": model_name,
-        "messages": [
-            {"role": "system", "content": "You are an expert Python programmer."},
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.0,
-        "stream": False
-    }
-    
-    try:
-        response = requests.post(url, json=payload, timeout=300)
-        response.raise_for_status()
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    except Exception as e:
-        print(f"Error calling Ollama API: {e}")
-        return ""
-
 def extract_code_from_response(response_text):
     """Extract Python code from model response"""
     if not response_text:
@@ -103,14 +111,11 @@ def extract_code_from_response(response_text):
     return response_text.strip()
 
 # --- With CodeCarbon Emissions Tracking ---
-def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir):
+def run_inference_with_emissions(code_samples, llm_config, sys_prompt, task, exp_name, result_dir):
     """Run code generation with emissions tracking and incremental saving"""
     
     # Create the output file path
     detailed_file = os.path.join(result_dir, f"{exp_name}_detailed_results.jsonl")
-    
-    model_name = llm_config["config_list"][0]["model"]
-    api_base = llm_config["config_list"][0]["api_base"]
     
     tracker = OfflineEmissionsTracker(
         project_name=exp_name, 
@@ -121,14 +126,16 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
     tracker.start()
     
     try:
+        code_generator = create_code_generator_agent(llm_config, sys_prompt)
+        
         for i, sample in enumerate(code_samples):
             print(f"Processing sample {i+1}/{len(code_samples)} (task_id: {sample.get('task_id', i)})")
             
-            # Get problem prompt (minimal, no extra instructions)
+            # Format task with prompt
             problem_prompt = sample.get('prompt', sample.get('description', ''))
+            content = task.format(prompt=problem_prompt)
             
-            # Direct API call without agent framework
-            response_text = generate_code_with_ollama(problem_prompt, model_name, api_base)
+            res = code_generator.generate_reply(messages=[{"content": content, "role": "user"}])
             
             # Store result with full sample information
             result = {
@@ -139,12 +146,13 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
                 'test': sample.get('test', '')
             }
             
-            if response_text:
+            if res is not None and "content" in res:
+                response_text = res["content"].strip()
                 generated_code = extract_code_from_response(response_text)
                 result['generated_solution'] = generated_code
             else:
                 result['generated_solution'] = ""
-                print(f"[Warning] Skipped sample {i} — no response.")
+                print(f"[Warning] Skipped sample {i} — no response or invalid format.")
             
             # Save immediately after each sample (append mode)
             with open(detailed_file, 'a') as f:
@@ -161,12 +169,22 @@ def run_inference_with_emissions(code_samples, llm_config, exp_name, result_dir)
     return detailed_file
 
 # --- Main Execution ---
-time.sleep(1)
+time.sleep(1)  # Brief initialization pause
 
-print(f"Running {DESIGN} code generation (no agent framework)...")
+# Select system prompt based on prompt type
+if args.prompt_type == "few_shot":
+    sys_prompt = config.SYS_MSG_CODE_GENERATOR_FEW_SHOT
+    print("Using few-shot system prompt")
+else:  # zero_shot
+    sys_prompt = config.SYS_MSG_CODE_GENERATOR_ZERO_SHOT
+    print("Using zero-shot system prompt")
+
+print(f"Running {DESIGN} code generation...")
 detailed_file = run_inference_with_emissions(
     code_samples, 
     llm_config, 
+    sys_prompt, 
+    config.SINGLE_AGENT_TASK_CODE_GENERATION, 
     exp_name, 
     RESULT_DIR
 )
@@ -174,7 +192,6 @@ detailed_file = run_inference_with_emissions(
 print(f"\nCode generation completed for experiment: {exp_name}")
 print(f"Total samples processed: {len(code_samples)}")
 print(f"Results saved to: {detailed_file}")
-
 
 # --- Call Evaluation Script ---
 print("\n" + "="*80)
@@ -203,3 +220,7 @@ except Exception as e:
     print(f"Failed to run evaluation: {e}")
     print("You can manually evaluate by running:")
     print(f"python evaluate_code_generation.py {detailed_file}")
+    
+    
+    
+    
