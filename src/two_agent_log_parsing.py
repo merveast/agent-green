@@ -43,12 +43,12 @@ def run_two_agent_inference_with_emissions_log_parsing(logs, llm_config, sys_pro
         )
 
         for i, log_message in enumerate(logs):
-            print(f"\n--- Processing log message {i+1}/{len(logs)} ---")
+            #print(f"\n--- Processing log message {i+1}/{len(logs)} ---")
             content_detection = task_prompt + log_message
             res_gen = log_parser.generate_reply(messages=[{"content": content_detection, "role": "user"}])
             if res_gen is not None and "content" in res_gen:
                 gen_log_template = normalize_template(res_gen["content"].strip())
-                print(f"[Info] Log parser agent processed log message {i+1}: {gen_log_template}")
+                #print(f"[Info] Log parser agent processed log message {i+1}: {gen_log_template}")
                 gen_log_templates.append(gen_log_template)
             else:
                 gen_log_templates.append("NONE")
@@ -67,7 +67,7 @@ def run_two_agent_inference_with_emissions_log_parsing(logs, llm_config, sys_pro
             res_critic = critic.generate_reply(messages=[{"content": content_critic, "role": "user"}])
             if res_critic is not None and "content" in res_critic:
                 critic_log_template = normalize_template(res_critic["content"].strip())
-                print(f"[Info] Critic agent processed log message {i+1}: {critic_log_template}")
+                #print(f"[Info] Critic agent processed log message {i+1}: {critic_log_template}")
                 critic_log_templates.append(critic_log_template)
             else:
                 critic_log_templates.append("NONE")
@@ -83,7 +83,7 @@ def main():
     parser.add_argument("--input", default=config.IN_FILE, help="Input log file name (in config.DATA_DIR)")
     parser.add_argument("--gt", default=config.GT_FILE, help="Ground-truth file name (in config.DATA_DIR)")
     parser.add_argument("--result-dir", default=config.RESULT_DIR, help="Directory to store results")
-    parser.add_argument("--design", default=None, help="Experiment design name (prefixes allowed: NA-, S-, DA-, MA-). If omitted, DA-{shot} will be used.")
+    parser.add_argument("--design", default=None, help="Experiment design name (prefixes allowed: NA-, SA-, DA-, MA-). If omitted, DA-{shot} will be used.")
     parser.add_argument("--shot", default="few", choices=["zero", "few"], help="zero or few shot prompt selection")
     args = parser.parse_args()
 
@@ -110,7 +110,7 @@ def main():
     if design is None:
         DESIGN = f"DA-{shot}"
     else:
-        if any(design.startswith(p) for p in ("NA-", "S-", "DA-", "MA-")):
+        if any(design.startswith(p) for p in ("NA-", "SA-", "DA-", "MA-")):
             DESIGN = design
         else:
             DESIGN = design
