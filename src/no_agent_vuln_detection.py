@@ -44,10 +44,10 @@ task = config.VULNERABILITY_TASK_PROMPT
 # Select system prompt based on prompt type
 if prompt_type == "few_shot":
     sys_prompt = config.SYS_MSG_VULNERABILITY_DETECTOR_FEW_SHOT
-    print("🧩 Using FEW-SHOT prompt for vulnerability detection.")
+    print("Using FEW-SHOT prompt for vulnerability detection.")
 else:
     sys_prompt = config.SYS_MSG_VULNERABILITY_DETECTOR_ZERO_SHOT
-    print("🧠 Using ZERO-SHOT prompt for vulnerability detection.")
+    print("Using ZERO-SHOT prompt for vulnerability detection.")
 
 LOG_DIR = config.LOG_DIR
 RESULT_DIR = config.RESULT_DIR
@@ -188,11 +188,11 @@ def run_inference_with_emissions(samples, model_name, sys_prompt, task_prompt, e
                     f.write(",".join(row) + "\n")
                 
                 results.append(result)
-                print(f"  ✓ Completed: vuln={vuln}, gt={item.get('target', 0)}")
+                print(f"Completed: vuln={vuln}, gt={item.get('target', 0)}")
 
             except Exception as e:
                 errors += 1
-                print(f"  ❌ Error: {e}")
+                print(f"Error: {e}")
                 
                 result = {
                     "idx": item.get("idx", i),
@@ -220,7 +220,7 @@ def run_inference_with_emissions(samples, model_name, sys_prompt, task_prompt, e
 # ================================================================
 # EVALUATION
 # ================================================================
-def evaluate_results(results, result_dir, exp_name):
+def evaluate_results(results, dataset_file, exp_name):
     """Evaluate vulnerability detection results"""
     preds = [r["vuln"] for r in results]
     gts = [r.get("ground_truth", 0) for r in results]
@@ -239,7 +239,7 @@ def evaluate_results(results, result_dir, exp_name):
     print(report)
     
     # Save evaluation summary
-    detailed_file = os.path.join(result_dir, f"{exp_name}_detailed_results.jsonl")
+    detailed_file = os.path.join(RESULT_DIR, f"{exp_name}_detailed_results.jsonl")
     eval_summary = {
         "evaluation_summary": {
             "accuracy": round(acc, 4),
@@ -249,6 +249,26 @@ def evaluate_results(results, result_dir, exp_name):
     }
     with open(detailed_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(eval_summary, ensure_ascii=False) + "\n")
+    
+    # Run additional evaluations
+    print("\n" + "=" * 60)
+    print("RUNNING ADDITIONAL EVALUATIONS")
+    print("=" * 60)
+    
+    for i, (fn, name) in enumerate(
+        [
+            (normalize_vulnerability_basic, "basic"),
+            (normalize_vulnerability_conservative, "conservative"),
+            (normalize_vulnerability_strict, "strict"),
+        ],
+        1,
+    ):
+        print(f"\n[{i}/3] Evaluating with {name} normalization...")
+        try:
+            eval_result = evaluate_and_save_vulnerability(fn, preds, dataset_file, f"{exp_name}_{name}")
+            print(f"{name.capitalize()} evaluation complete: Accuracy = {eval_result.get('accuracy', 0):.4f}")
+        except Exception as e:
+            print(f"Error during {name} evaluation: {e}")
     
     return acc, cm, report
 
@@ -285,30 +305,8 @@ def main():
         print(f"Templates saved for experiment: {exp_name}")
         
         # Evaluate results
-        acc, cm, report = evaluate_results(results, RESULT_DIR, exp_name)
+        acc, cm, report = evaluate_results(results, DATASET_FILE, exp_name)
         
-        # Run additional evaluations
-        print("\n" + "=" * 60)
-        print("RUNNING ADDITIONAL EVALUATIONS")
-        print("=" * 60)
-        
-        predictions = [r["vuln"] for r in results]
-        
-        for i, (fn, name) in enumerate(
-            [
-                (normalize_vulnerability_basic, "basic"),
-                (normalize_vulnerability_conservative, "conservative"),
-                (normalize_vulnerability_strict, "strict"),
-            ],
-            1,
-        ):
-            print(f"\n[{i}/3] Evaluating with {name} normalization...")
-            try:
-                eval_result = evaluate_and_save_vulnerability(fn, predictions, DATASET_FILE, f"{exp_name}_{name}")
-                print(f"✓ {name.capitalize()} evaluation complete: Accuracy = {eval_result.get('accuracy', 0):.4f}")
-            except Exception as e:
-                print(f"✗ Error during {name} evaluation: {e}")
-
     finally:
         # Clean up Ollama server
         stop_ollama_server(proc)
