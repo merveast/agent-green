@@ -71,7 +71,8 @@ Otherwise, just run the command directly.
 No Agent Usage 
 
 ```
-python script/no_agent_vuln.py
+python script/no_agent_vuln.py --prompt_type few_shot   # run with few-shot
+python script/no_agent_vuln.py --prompt_type zero_shot   # run with zero-shot
 
 ```
 or 
