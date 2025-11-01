@@ -119,7 +119,7 @@ def run_multi_agent_inference_with_emissions_log_parsing(logs, llm_config, sys_p
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Two-agent log parsing runner")
+    parser = argparse.ArgumentParser(description="Multi-agent log parsing runner")
     parser.add_argument("--input", default=config.IN_FILE, help="Input log file name (in config.DATA_DIR)")
     parser.add_argument("--gt", default=config.GT_FILE, help="Ground-truth file name (in config.DATA_DIR)")
     parser.add_argument("--result-dir", default=config.RESULT_DIR, help="Directory to store results")
