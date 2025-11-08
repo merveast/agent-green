@@ -7,6 +7,7 @@ import config
 from vuln_evaluation import evaluate_and_save_vulnerability, normalize_vulnerability_basic
 from agent_utils_vuln import create_agent
 from sklearn.metrics import classification_report, confusion_matrix
+from ollama_utils import start_ollama_server,stop_ollama_server
 
 # --- Configuration ---
 llm_config = config.LLM_CONFIG
@@ -200,11 +201,11 @@ def run_inference_with_emissions(samples, llm_config, exp_name, result_dir, prom
 
                 append_result(result, detailed_file, csv_file, header_fields)
                 results.append(result)
-                print(f"  ✅ Completed: vuln={vuln}, gt={s.get('target')}")
+                print(f"Completed: vuln={vuln}, gt={s.get('target')}")
 
             except Exception as e:
                 errors += 1
-                print(f"  ❌ Error: {e}")
+                print(f"Error: {e}")
                 result = dict(s)
                 result.update({
                     "vuln": 0,
@@ -239,22 +240,33 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     exp_name = f"{DESIGN}_{model}_vuln_{timestamp}"
 
-    print("Loading dataset...")
-    samples = []
-    with open(DATASET_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                if "func" in data and "target" in data:
-                    samples.append(data)
-            except json.JSONDecodeError:
-                continue
+    print("Starting Ollama server...")
+    proc = start_ollama_server()
+    time.sleep(5)  # allow time for initialization
 
-    print(f"Loaded {len(samples)} samples.")
-    test_samples = samples  # full dataset
+    try:
+        print("Loading dataset...")
+        samples = []
+        with open(DATASET_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    if "func" in data and "target" in data:
+                        samples.append(data)
+                except json.JSONDecodeError:
+                    continue
+    
+        print(f"Loaded {len(samples)} samples.")
+        test_samples = samples  # full dataset
+    
+        print(f"Running {DESIGN} vulnerability detection ({prompt_type.upper()} mode)...")
+        results = run_inference_with_emissions(test_samples, llm_config, exp_name, RESULT_DIR, prompt_type)
+    except Exception as e:
+        print(f"Error during inference: {e}")
 
-    print(f"Running {DESIGN} vulnerability detection ({prompt_type.upper()} mode)...")
-    results = run_inference_with_emissions(test_samples, llm_config, exp_name, RESULT_DIR, prompt_type)
+    finally:
+        print("Stopping Ollama server...")
+        stop_ollama_server(proc)
 
     # --------------------------------------------------------------------
     # Inline Evaluation (same file output)
@@ -285,7 +297,7 @@ def main():
     with open(detailed_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(eval_summary, ensure_ascii=False) + "\n")
 
-    print(f"✅ Evaluation results appended to {detailed_file}")
+    print(f"Evaluation results appended to {detailed_file}")
 
     try:
         evaluate_and_save_vulnerability(normalize_vulnerability_basic, preds, DATASET_FILE, exp_name)
