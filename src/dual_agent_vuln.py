@@ -8,7 +8,8 @@ import argparse
 from datetime import datetime
 from codecarbon import OfflineEmissionsTracker
 from sklearn.metrics import classification_report, confusion_matrix
-
+import time
+from ollama_utils import start_ollama_server,stop_ollama_server
 import config
 from vuln_evaluation import evaluate_and_save_vulnerability, normalize_vulnerability_basic
 from agent_utils_vuln import create_agent
@@ -281,25 +282,35 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     exp_name = f"{DESIGN}_{model}_vuln_{timestamp}"
 
-    print("Loading dataset...")
-    samples = []
-    with open(DATASET_FILE, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                if "func" in data and "target" in data:
-                    samples.append(data)
-            except json.JSONDecodeError:
-                continue
+    print("Starting Ollama server ....")
+    proc = start_ollama_server()
+    time.sleep(5)
+    try:
+        print("Loading dataset...")
+        samples = []
+        with open(DATASET_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    if "func" in data and "target" in data:
+                        samples.append(data)
+                except json.JSONDecodeError:
+                    continue
 
-    print(f"Loaded {len(samples)} samples.")
-    if not samples:
-        print("No valid samples found. Exiting.")
-        return
+        print(f"Loaded {len(samples)} samples.")
+        if not samples:
+            print("No valid samples found. Exiting.")
+            return
 
-    print(f"Running {DESIGN} (1 round per agent, {prompt_type.upper()} mode)...")
-    results = run_inference_with_emissions(samples, llm_config, exp_name, RESULT_DIR, prompt_type)
+        print(f"Running {DESIGN} (1 round per agent, {prompt_type.upper()} mode)...")
+        results = run_inference_with_emissions(samples, llm_config, exp_name, RESULT_DIR, prompt_type)
 
+    except Exception as e:
+        print(f"Error during inference: {e}")
+    
+    finally:
+        print("Stopping Ollama server ....")
+        stop_ollama_server(proc)
     # ==================== Inline Evaluation ====================
     preds = [r.get("vuln", 0) for r in results]
     gts = [r.get("target", 0) for r in results]
