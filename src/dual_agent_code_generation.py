@@ -7,6 +7,7 @@ import argparse
 from datetime import datetime
 from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
+from ollama_utils import start_ollama_server,stop_ollama_server
 import subprocess
 
 # ---------------------------
@@ -275,27 +276,35 @@ def main():
     print("\n" + "="*60)
     print(f"DUAL-AGENT CODE GENERATION - {args.prompt_type.upper()}")
     print("="*60)
-    
-    # Load dataset
-    samples = read_dataset(DATASET_FILE)
-    
-    # Run inference
-    print(f"\nRunning {DESIGN} dual-agent code generation...")
-    results_file = run_dual_agent_inference(
-        samples, 
-        llm_config, 
-        exp_name, 
-        RESULT_DIR, 
-        args.prompt_type
-    )
-    
-    print(f"\nResults saved to: {results_file}")
-    
-    # Run evaluation
+
+    # Start Ollama server and wait a few seconds
+    proc = start_ollama_server()
+    time.sleep(5)
+
+    try:
+        # --- Run code generation ---
+        samples = read_dataset(DATASET_FILE)
+        print(f"\nRunning {DESIGN} dual-agent code generation...")
+        results_file = run_dual_agent_inference(
+            samples,
+            llm_config,
+            exp_name,
+            RESULT_DIR,
+            args.prompt_type
+        )
+
+        print(f"\nResults saved to: {results_file}")
+
+    except Exception as e:
+        print(f"Error during code generation: {e}")
+
+    finally:
+        stop_ollama_server(proc)
+
+    # --- Run evaluation ---
     print("\n" + "="*80)
     print("STARTING EVALUATION")
     print("="*80)
-    
     try:
         eval_result = subprocess.run(
             ["python", "src/evaluate_code_generation.py", results_file],
@@ -303,23 +312,20 @@ def main():
             text=True,
             timeout=600
         )
-        
+
         print(eval_result.stdout)
-        
         if eval_result.returncode != 0:
-            print("⚠️ Evaluation encountered an error:")
+            print("Evaluation encountered an error:")
             print(eval_result.stderr)
         else:
             print("\n" + "="*80)
             print("EVALUATION COMPLETED SUCCESSFULLY")
             print("="*80)
-    
+
     except subprocess.TimeoutExpired:
-        print("Evaluation timed out after 10 minutes")
+        print("Evaluation timed out after 10 minutes.")
     except Exception as e:
         print(f"Failed to run evaluation: {e}")
-        print(f"You can manually evaluate by running:")
-        print(f"python src/evaluate_code_generation.py {results_file}")
-
+        
 if __name__ == "__main__":
     main()
