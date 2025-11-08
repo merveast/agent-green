@@ -8,6 +8,7 @@ import argparse
 from datetime import datetime
 from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
+from ollama_utils import start_ollama_server,stop_ollama_server
 
 # --- Parse Command Line Arguments ---
 def parse_arguments():
@@ -180,14 +181,23 @@ else:  # zero_shot
     print("Using zero-shot system prompt")
 
 print(f"Running {DESIGN} code generation...")
-detailed_file = run_inference_with_emissions(
-    code_samples, 
-    llm_config, 
-    sys_prompt, 
-    config.SINGLE_AGENT_TASK_CODE_GENERATION, 
-    exp_name, 
-    RESULT_DIR
-)
+print("Starting Ollama server...")
+proc = start_ollama_server()
+time.sleep(5)    
+try:    
+    detailed_file = run_inference_with_emissions(
+        code_samples, 
+        llm_config, 
+        sys_prompt, 
+        config.SINGLE_AGENT_TASK_CODE_GENERATION, 
+        exp_name, 
+        RESULT_DIR
+    )
+except Exception as e:
+        print(f"Error during inference: {e}")
+finally:
+        print("Stopping Ollama server...")
+        stop_ollama_server(proc)
 
 print(f"\nCode generation completed for experiment: {exp_name}")
 print(f"Total samples processed: {len(code_samples)}")
