@@ -12,6 +12,7 @@ from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
 from vuln_evaluation import evaluate_and_save_vulnerability, normalize_vulnerability_basic
 from sklearn.metrics import classification_report, confusion_matrix
+from ollama_utils import start_ollama_server,stop_ollama_server
 import config
 
 
@@ -201,8 +202,21 @@ def main():
         print("No samples found, exiting.")
         return
 
-    print(f"Running {DESIGN} ({prompt_type.upper()} mode, 1 agent 1 round)...")
-    results = run_inference_with_emissions(samples, llm_config, exp_name, RESULT_DIR, prompt_type)
+    print("Starting Ollama server...")
+    proc = start_ollama_server()
+    time.sleep(5)  # allow time for Ollama to initialize
+
+    try:
+        print(f"Running {DESIGN} ({prompt_type.upper()} mode, 1 agent 1 round)...")
+        results = run_inference_with_emissions(samples, llm_config, exp_name, RESULT_DIR, prompt_type)
+    except Exception as e:
+        print(f"Error during inference: {e}")
+        results = []
+
+    finally:
+        print("Stopping Ollama server...")
+        stop_ollama_server(proc)
+
 
     # ==================== Inline Evaluation ====================
     preds = [r.get("vuln", 0) for r in results]
