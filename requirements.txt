@@ -121,3 +121,7 @@ wheel==0.45.1
 wrapt==1.17.2
 yarg==0.1.9
 yaspin==3.1.0
+evaluate==0.4.3
+datasets==3.1.0
+accelerate==1.2.1
+transformers==4.46.3
