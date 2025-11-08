@@ -8,7 +8,6 @@ from evaluate import load
 
 os.environ["HF_ALLOW_CODE_EVAL"] = "1"
 
-
 def extract_code_from_prediction(prediction):
     """Extract actual Python code from prediction"""
     import re
