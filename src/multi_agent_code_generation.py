@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
+from ollama_utils import start_ollama_server,stop_ollama_server
 import sys
 import subprocess
 
@@ -318,35 +319,46 @@ def main():
     print("\n" + "="*60)
     print(f"MULTI-AGENT CODE GENERATION - {args.prompt_type.upper()}")
     print("="*60)
-    
-    # Load dataset
-    code_samples = read_code_generation_data(DATASET_FILE)
-    
-    # Select appropriate system prompts based on prompt_type
-    sys_prompts = {}
-    if args.prompt_type == 'zero_shot':
-        sys_prompts["analyst"] = config.SYS_MSG_REQUIREMENTS_ANALYST_ZERO_SHOT
-        sys_prompts["programmer"] = config.SYS_MSG_PROGRAMMER_MA_ZERO_SHOT
-        sys_prompts["moderator"] = config.SYS_MSG_MODERATOR_CODE_ZERO_SHOT
-        sys_prompts["review_board"] = config.SYS_MSG_REVIEW_BOARD_CODE_ZERO_SHOT
-    else:  # few_shot
-        sys_prompts["analyst"] = config.SYS_MSG_REQUIREMENTS_ANALYST
-        sys_prompts["programmer"] = config.SYS_MSG_PROGRAMMER_MA
-        sys_prompts["moderator"] = config.SYS_MSG_MODERATOR_CODE
-        sys_prompts["review_board"] = config.SYS_MSG_REVIEW_BOARD_CODE
-    
-    # Run inference
-    print(f"\nRunning {DESIGN} multi-agent code generation...")
-    detailed_file = run_inference_with_emissions(
-        code_samples,
-        llm_config,
-        sys_prompts,
-        exp_name,
-        RESULT_DIR,
-        args.prompt_type
-    )
-    
-    print(f"\nResults saved to: {detailed_file}")
+
+    print("Starting Ollama server...")
+    proc = start_ollama_server()
+    time.sleep(5)  # give it a few seconds to start up
+
+    try:
+        # Load dataset
+        code_samples = read_code_generation_data(DATASET_FILE)
+        
+        # Select appropriate system prompts based on prompt_type
+        sys_prompts = {}
+        if args.prompt_type == 'zero_shot':
+            sys_prompts["analyst"] = config.SYS_MSG_REQUIREMENTS_ANALYST_ZERO_SHOT
+            sys_prompts["programmer"] = config.SYS_MSG_PROGRAMMER_MA_ZERO_SHOT
+            sys_prompts["moderator"] = config.SYS_MSG_MODERATOR_CODE_ZERO_SHOT
+            sys_prompts["review_board"] = config.SYS_MSG_REVIEW_BOARD_CODE_ZERO_SHOT
+        else:  # few_shot
+            sys_prompts["analyst"] = config.SYS_MSG_REQUIREMENTS_ANALYST
+            sys_prompts["programmer"] = config.SYS_MSG_PROGRAMMER_MA
+            sys_prompts["moderator"] = config.SYS_MSG_MODERATOR_CODE
+            sys_prompts["review_board"] = config.SYS_MSG_REVIEW_BOARD_CODE
+        
+        # Run inference
+        print(f"\nRunning {DESIGN} multi-agent code generation...")
+        detailed_file = run_inference_with_emissions(
+            code_samples,
+            llm_config,
+            sys_prompts,
+            exp_name,
+            RESULT_DIR,
+            args.prompt_type
+        )
+        
+        print(f"\nResults saved to: {detailed_file}")
+    except Exception as e:
+        print(f"Error during code generation: {e}")
+
+    finally:
+        print("Stopping Ollama server...")
+        stop_ollama_server(proc)
     
     # Run evaluation
     print("\n" + "="*60)
