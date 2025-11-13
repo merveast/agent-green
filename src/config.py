@@ -7,13 +7,12 @@ WORK_DIR = f'{PROJECT_ROOT}/tests/work_dir'
 RESULT_DIR = f'{PROJECT_ROOT}/results'
 PLOT_DIR = f'{PROJECT_ROOT}/plots'
 
-"""
 IN_FILE = "mlcq_cleaned_and_pruned_dataset_385.csv"
 GT_FILE = "mlcq_cleaned_and_pruned_dataset_385.csv"
 # Task and design settings
 #TASK = "log-parsing" # options: "log-parsing", "log-analysis", "code-generation", "vul-detection", "td-detection"
 TASK = "td-detection"
-DESIGN = "SA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
+DESIGN = "TA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
 
 """
 IN_FILE = "HDFS_385_sampled.log"
@@ -22,7 +21,7 @@ GT_FILE = "HDFS_385_sampled_log_structured_corrected.csv"
 #TASK = "log-parsing" # options: "log-parsing", "log-analysis", "code-generation", "vul-detection", "td-detection"
 TASK = "log-parsing"
 DESIGN = "DA-few"  # options: "SA-zero", "NA-few", "DA-few", "MA-zero", etc.
-
+"""
 
 VULN_DATASET = f"{PROJECT_ROOT}/vuln_database/VulTrial_386_samples_balanced.jsonl"
 HUMANEVAL_DATASET = f"{PROJECT_ROOT}/vuln_database/HumanEval.jsonl"
@@ -260,8 +259,132 @@ SYS_MSG_LOG_PARSER_REFINER_FEW_SHOT = """
 # LOG ANALYSIS CONFIGURATION
 # ========================================================================================
 
-TASK_PROMPT_LOG_ANALYSIS = """Analyze the following log messages and identify any anomalies or issues:\n"""
-SYS_MSG_LOG_ANALYSIS_GENERATOR_ZERO_SHOT = """
+TASK_PROMPT_LOG_ANALYSIS = """Look at the following sequence of log messages and determine whether the session represents normal system behavior (0) or anomalous behavior (1):\n"""
+SYS_MSG_SINGLE_LOG_ANALYSIS_ZERO_SHOT = """
+        You are an intelligent agent for log anomaly detection.
+
+        Task:
+        Given a session-based set of raw log messages, determine whether the session represents normal system behavior (0) or anomalous behavior (1).
+
+        Instructions:
+        1. **Parse the logs**:
+        - Each log line may contain a header (timestamp, log level, class, etc.).
+        - Remove or ignore these headers and extract the main log message body describing the event.
+        - Preserve message order.
+
+        2. **Analyze the session**:
+        - Review the sequence of message bodies, consider the contextual information of the sequence.
+        - Identify anomalies from two perspectives:
+            a. **Textual anomalies**; individual messages explicitly indicate errors or failures, such as explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure-related keywords (e.g., "error", "fail", "exception", "crash", "interrupt", "fatal").
+            b. **Behavioral anomalies**; whether the overall sequence is consistent with normal execution flow, or shows irregularities such as missing or skipped expected events, unusual ordering, repetitive failures, or abrupt terminations.
+
+        3. **Decision rule**:
+        - If either textual or behavioral anomalies are detected, label the session as anomalous (1).
+        - Otherwise, label it as normal (0).
+
+        4. **Output**:
+        - Provide only a binary label (0 or 1):
+            0 → Normal session
+            1 → Anomalous session
+        - No punctuation, explanation, or extra text.
+        """
+SYS_MSG_SINGLE_LOG_ANALYSIS_FEW_SHOT = """
+        You are an intelligent agent for log anomaly detection.
+
+        Task:
+        Given a session-based set of raw log messages, determine whether the session represents normal system behavior (0) or anomalous behavior (1).
+
+        Instructions:
+        1. **Parse the logs**:
+        - Each log line may contain a header (timestamp, log level, class, etc.).
+        - Remove or ignore these headers and extract the main log message body describing the event.
+        - Preserve message order.
+
+        2. **Analyze the session**:
+        - Review the sequence of message bodies, consider the contextual information of the sequence.
+        - Identify anomalies from two perspectives:
+            a. **Textual anomalies**; individual messages explicitly indicate errors or failures, such as explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure-related keywords (e.g., "error", "fail", "exception", "crash", "interrupt", "fatal").
+            b. **Behavioral anomalies**; whether the overall sequence is consistent with normal execution flow, or shows irregularities such as missing or skipped expected events, unusual ordering, repetitive failures, or abrupt terminations.
+
+        3. **Decision rule**:
+        - If either textual or behavioral anomalies are detected, label the session as anomalous (1).
+        - Otherwise, label it as normal (0).
+
+        4. **Output**:
+        - Provide only a binary label (0 or 1):
+            0 → Normal session
+            1 → Anomalous session
+        - No punctuation, explanation, or extra text.
+
+        Here are a few examples of log sequences and their classifications:
+        Example 1:
+            LOG MESSAGES:
+                081111 094743 25776 INFO dfs.DataNode$DataXceiver: Receiving block blk_6667093857658912327 src: /10.251.73.188:57743 dest: /10.251.73.188:50010
+                081111 094743 26099 INFO dfs.DataNode$DataXceiver: Receiving block blk_6667093857658912327 src: /10.251.73.188:54097 dest: /10.251.73.188:50010
+                081111 094743 28 INFO dfs.FSNamesystem: BLOCK* NameSystem.allocateBlock: /user/root/rand8/_temporary/_task_200811101024_0015_m_001611_0/part-01611. blk_6667093857658912327
+                081111 094744 25996 INFO dfs.DataNode$DataXceiver: Receiving block blk_6667093857658912327 src: /10.251.106.37:53888 dest: /10.251.106.37:50010
+                081111 094828 26100 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_6667093857658912327 terminating
+                081111 094828 26100 INFO dfs.DataNode$PacketResponder: Received block blk_6667093857658912327 of size 67108864 from /10.251.73.188
+                081111 094828 29 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.106.37:50010 is added to blk_6667093857658912327 size 67108864
+                081111 094828 30 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.188:50010 is added to blk_6667093857658912327 size 67108864
+                081111 094828 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.110.160:50010 is added to blk_6667093857658912327 size 67108864
+                081111 094829 25777 INFO dfs.DataNode$PacketResponder: PacketResponder 2 for block blk_6667093857658912327 terminating
+                081111 094829 25777 INFO dfs.DataNode$PacketResponder: Received block blk_6667093857658912327 of size 67108864 from /10.251.73.188
+                081111 094829 25997 INFO dfs.DataNode$PacketResponder: PacketResponder 0 for block blk_6667093857658912327 terminating
+                081111 094829 25997 INFO dfs.DataNode$PacketResponder: Received block blk_6667093857658912327 of size 67108864 from /10.251.106.37
+            OUTPUT: 0
+        Example 2:
+            LOG MESSAGES:
+                081111 061856 34 INFO dfs.FSNamesystem: BLOCK* NameSystem.allocateBlock: /user/root/randtxt5/_temporary/_task_200811101024_0012_m_001014_0/part-01014. blk_4615226180823858743
+                081111 061857 21831 INFO dfs.DataNode$DataXceiver: Receiving block blk_4615226180823858743 src: /10.251.30.179:36961 dest: /10.251.30.179:50010
+            OUTPUT: 1
+        Example 3:
+            LOG MESSAGES:
+                081110 010402 30 INFO dfs.FSNamesystem: BLOCK* NameSystem.allocateBlock: /user/root/randtxt/_temporary/_task_200811092030_0003_m_000269_0/part-00269. blk_-152459496294138933
+                081110 010402 5086 INFO dfs.DataNode$DataXceiver: Receiving block blk_-152459496294138933 src: /10.251.74.134:53158 dest: /10.251.74.134:50010
+                081110 010402 5110 INFO dfs.DataNode$DataXceiver: Receiving block blk_-152459496294138933 src: /10.251.74.134:51159 dest: /10.251.74.134:50010
+                081110 010405 5086 INFO dfs.DataNode$DataXceiver: writeBlock blk_-152459496294138933 received exception java.io.IOException: Could not read from stream
+            OUTPUT: 1
+        """
+
+SYS_MSG_LOG_PREPROCESSOR_ZERO_SHOT = """
+        You are a log parsing agent.
+
+        Task:
+        Receive raw, session-based log messages and extract only the message bodies by removing automatically generated headers.
+
+        Instructions:
+        1. Each log line may contain a header (timestamp, log level, class, etc.).
+        2. Remove these headers and extract the main log **message body** describing the event.
+        3. Preserve message order.
+        4. Output the cleaned sequence of log message bodies, no explanation, or extra text.
+        """
+
+SYS_MSG_LOG_PREPROCESSOR_FEW_SHOT = """
+        You are a log parsing agent.
+
+        Task:
+        Receive raw, session-based log messages and extract only the message bodies by removing automatically generated headers.
+
+        Instructions:
+        1. Each log line may contain a header (timestamp, log level, class, etc.).
+        2. Remove these headers and extract the main log **message body** describing the event.
+        3. Preserve message order.
+        4. Output the cleaned sequence of log message bodies, no explanation, or extra text.
+
+        Here are a few examples of raw log messages and their extracted message bodies:
+        Example 1:
+            Raw Log: 081109 204005 35 INFO dfs.FSNamesystem: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+            Extracted Message Body: BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.220:50010 is added to blk_7128370237687728475 size 67108864
+        Example 2:
+            Raw Log: 081109 204842 663 INFO dfs.DataNode$DataXceiver: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
+            Extracted Message Body: Receiving block blk_1724757848743533110 src: /10.251.111.130:49851 dest: /10.251.111.130:50010
+        Example 3:
+            Raw Log: 081109 203615 148 INFO dfs.DataNode$PacketResponder: PacketResponder 1 for block blk_38865049064139660 terminating
+            Extracted Message Body: PacketResponder 1 for block blk_38865049064139660 terminating
+        """
+
+SYS_MSG_LOG_ANOMALY_DETECTOR_ZERO_SHOT = """
         You are a log analysis expert. Your task is to classify a sequence of log messages (sorted by timestamp) as either normal (0) or anomalous (1).
 
         Output:
@@ -269,80 +392,142 @@ SYS_MSG_LOG_ANALYSIS_GENERATOR_ZERO_SHOT = """
         - No punctuation, explanation, or extra text.
         Decision rules:
         - 0 (normal): routine operations, monitoring/debug entries, or insufficient information to claim an error.
-        - 1 (anomalous): explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure keywords.
+        - 1 (anomalous): explicit error/fault indicators, exceptions, crashes, int errupt messages, or clear failure keywords.
         - Do NOT label anomalies on the basis of runtime variable content (numeric ids, IPs, timestamps) unless the surrounding text signals an error.
         - Consider the contextual information of the log sequence.
         """
-SYS_MSG_LOG_ANALYSIS_GENERATOR_FEW_SHOT = """
-        You are a log analysis expert. Your task is to classify a sequence of log messages (sorted by timestamp) as either normal (0) or anomalous (1).
 
-        Output:
-        - Exactly one character: "0" for normal or "1" for anomalous.
+SYS_MSG_LOG_ANOMALY_DETECTOR_FEW_SHOT = """
+        You are an anomaly detection agent.
+
+        Task: 
+        Analyze the parsed session logs and decide whether the session represents normal or anomalous behavior.
+
+        Instructions:
+        1. Review the sequence of message bodies, consider the contextual information of the sequence.
+        2. Detect anomalies using two perspectives:
+        a. **Textual anomalies**; individual messages explicitly indicate errors or failures, such as explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure-related keywords (e.g., "error", "fail", "exception", "crash", "interrupt", "fatal”).
+        b. **Behavioral anomalies**: abnormal log flow or unexpected event patterns.
+            - Missing or skipped expected events
+            - Repetition of unusual events
+            - Events out of expected order
+            - Inconsistent or incomplete sequences
+        3. Combine both clues to make your decision.
+        4. Output only a binary label (0 or 1):
+            0 → Normal session
+            1 → Anomalous session
         - No punctuation, explanation, or extra text.
-        Decision rules:
-        - 0 (normal): routine operations, monitoring/debug entries, or insufficient information to claim an error.
-        - 1 (anomalous): explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure keywords.
-        - Do NOT label anomalies on the basis of runtime variable content (numeric ids, IPs, timestamps) unless the surrounding text signals an error.
-        - Consider the contextual information of the log sequence.
-        Examples:
+
+        Here are a few examples of parsed session logs and their classifications:
+        Example 1:
+            Parsed Session Logs:
+                Receiving block blk_6667093857658912327 src: /10.251.73.188:57743 dest: /10.251.73.188:50010
+                Receiving block blk_6667093857658912327 src: /10.251.73.188:54097 dest: /10.251.73.188:50010
+                BLOCK* NameSystem.allocateBlock: /user/root/rand8/_temporary/_task_200811101024_0015_m_001611_0/part-01611. blk_6667093857658912327
+                Receiving block blk_6667093857658912327 src: /10.251.106.37:53888 dest: /10.251.106.37:50010
+                PacketResponder 1 for block blk_6667093857658912327 terminating
+                Received block blk_6667093857658912327 of size 67108864 from /10.251.73.188
+                BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.106.37:50010 is added to blk_6667093857658912327 size 67108864
+                BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.188:50010 is added to blk_6667093857658912327 size 67108864
+                BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.110.160:50010 is added to blk_6667093857658912327 size 67108864
+                PacketResponder 2 for block blk_6667093857658912327 terminating
+                Received block blk_6667093857658912327 of size 67108864 from /10.251.73.188
+                PacketResponder 0 for block blk_6667093857658912327 terminating
+                Received block blk_6667093857658912327 of size 67108864 from /10.251.106.37
+            Output: 0
+        Example 2:
+            Parsed Session Logs:
+                BLOCK* NameSystem.allocateBlock: /user/root/randtxt5/_temporary/_task_200811101024_0012_m_001014_0/part-01014. blk_4615226180823858743
+                Receiving block blk_4615226180823858743 src: /10.251.30.179:36961 dest: /10.251.30.179:50010
+            Output: 1       
+        Example 3:
+            Parsed Session Logs:
+                BLOCK* NameSystem.allocateBlock: /user/root/randtxt/_temporary/_task_200811092030_0003_m_000269_0/part-00269. blk_-152459496294138933
+                Receiving block blk_-152459496294138933 src: /10.251.74.134:53158 dest: /10.251.74.134:50010
+                Receiving block blk_-152459496294138933 src: /10.251.74.134:51159 dest: /10.251.74.134:50010
+                writeBlock blk_-152459496294138933 received exception java.io.IOException: Could not read from stream
+            Output: 1
         """
 
 SYS_MSG_LOG_ANALYSIS_CRITIC_ZERO_SHOT = """
-        You are a log analysis critic/verifier. You will be shown:
-        1) A sequence of log messages sorted by timestamp (LOG_SEQUENCE).
-        2) A proposed label produced by the log_analysis_generator_agent (GENERATOR_LABEL), which is the single character "0" or "1".
-
-        Labels:
-        0 = normal
-        1 = anomalous
+        You are a log analysis critic agent.
 
         Task:
-        - Carefully review the LOG_SEQUENCE and the GENERATOR_LABEL.
-        - Consider contextual information across the sequence (temporal patterns, repeated warnings, escalation).
-        - Treat placeholders like <*> and missing values as normal (not evidence of anomaly) unless surrounding text indicates a failure.
-        - If the proposed label is correct, respond with exactly:
-                APPROVED|<correct_digit>|
-            where <correct_digit> is the same digit (0 or 1). Nothing else.
-        - If the proposed label is incorrect, respond with exactly one single-line string in this format:
-                REJECTED|<correct_digit>|<brief_reason>
-            where:
-            * <correct_digit> is the correct label (0 or 1).
-            * <brief_reason> is a concise justification (one short clause/sentence, ≤20 words) stating the primary evidence from the logs.
-            Use '|' (pipe) as separators and do not include any other characters, lines, or commentary.
-
-        Examples of valid critic outputs:
-        APPROVED|0|
-        REJECTED|1|Sequence contains explicit ERROR and stacktrace indicating failure.
-
-        Constraints:
-        - Output only the exact allowed formats above.
-        - Keep brief_reason factual, focused, and short (one clause or short sentence).
+        Review the parsed log session and the anomaly detection result. 
+        Your role is to verify whether the decision (0 or 1) is justified based on the log content. 
+        Correct it only if clear evidence contradicts the decision.
+        
+        Instructions:
+        1. Examine both the parsed log session and the decision (0 or 1) from the anomaly detector agent.
+        2. Evaluate based on:
+            - **Textual anomalies**; individual messages explicitly indicate errors or failures, such as explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure-related keywords (e.g., "error", "fail", "exception", "crash", "interrupt", "fatal").
+            - **Behavioral context**; whether the overall sequence is consistent with normal execution flow, or shows irregularities such as missing or skipped expected events, unusual ordering, repetitive failures, or abrupt terminations.
+        3. If the decision appears incorrect, adjust it:
+            - If anomalies exist but were missed → output 1
+            - If normal behavior was mistakenly flagged → output 0
+        4. Always ensure your final output (0 or 1) is consistent with both textual and behavioral evidence. Do not guess - if evidence is insufficient, keep the original decision.
+        5. Output only the final binary label (0 or 1):
+            - 0 → Normal session
+            - 1 → Anomalous session
+            No punctuation, explanation, or extra text.
         """
 
-SYS_MSG_LOG_ANALYSIS_REFINER_ZERO_SHOT = """
-        You are a log analysis refiner. You will be given:
-        LOG_SEQUENCE: a list of log messages (sorted by timestamp)
-        GENERATOR_LABEL: the single-digit label (0 or 1) produced by the log_analysis_generator_agent
-        CRITIC_FEEDBACK: either APPROVED|<digit>|, REJECTED|<digit>|<brief_reason>, or empty (if no critic) produced by the log_analysis_critic_agent
-
-        Labels:
-        0 = normal
-        1 = anomalous
+SYS_MSG_LOG_ANALYSIS_CRITIC_FEW_SHOT = """
+        You are a log analysis critic agent.
 
         Task:
-        - Review LOG_SEQUENCE, GENERATOR_LABEL, and CRITIC_FEEDBACK (when present).
-        - Decide and output the single best label (0 or 1) for the sequence.
-        - Prefer the critic's corrected digit when CRITIC_FEEDBACK is REJECTED|<digit>|..., unless you find stronger evidence in the logs to choose a different label.
-        - If CRITIC_FEEDBACK is APPROVED|<digit>|, default to that label unless you find clear contrary evidence in the logs.
-        - Consider temporal/contextual patterns (escalation, repeated warnings), but do NOT treat placeholders like <*> or missing values as anomalies by themselves.
+        Review the parsed log session and the anomaly detection result. 
+        Your role is to verify whether the decision (0 or 1) is justified based on the log content. 
+        Correct it only if clear evidence contradicts the decision.
+        
+        Instructions:
+        1. Examine both the parsed log session and the decision (0 or 1) from the anomaly detector agent.
+        2. Evaluate based on:
+            - **Textual anomalies**; individual messages explicitly indicate errors or failures, such as explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure-related keywords (e.g., "error", "fail", "exception", "crash", "interrupt", "fatal").
+            - **Behavioral context**; whether the overall sequence is consistent with normal execution flow, or shows irregularities such as missing or skipped expected events, unusual ordering, repetitive failures, or abrupt terminations.
+        3. If the decision appears incorrect, adjust it:
+            - If anomalies exist but were missed → output 1
+            - If normal behavior was mistakenly flagged → output 0
+        4. Always ensure your final output (0 or 1) is consistent with both textual and behavioral evidence. Do not guess - if evidence is insufficient, keep the original decision.
+        5. Output only the final binary label (0 or 1):
+            - 0 → Normal session
+            - 1 → Anomalous session
+            No punctuation, explanation, or extra text.
 
-        Output rules (strict):
-        - Print exactly one character: "0" or "1" and nothing else.
-        - Do not print APPROVED/REJECTED, reasons, or any extra text.
-        - If the logs are ambiguous, output the most defensible label (do not output an error token).
-    """
-
-
+        Here are a few examples of parsed log sessions, initial decisions, and final classifications:
+        Example 1:
+            Parsed Log Session:
+                Parsed Session Logs:
+                Receiving block blk_6667093857658912327 src: /10.251.73.188:57743 dest: /10.251.73.188:50010
+                Receiving block blk_6667093857658912327 src: /10.251.73.188:54097 dest: /10.251.73.188:50010
+                BLOCK* NameSystem.allocateBlock: /user/root/rand8/_temporary/_task_200811101024_0015_m_001611_0/part-01611. blk_6667093857658912327
+                Receiving block blk_6667093857658912327 src: /10.251.106.37:53888 dest: /10.251.106.37:50010
+                PacketResponder 1 for block blk_6667093857658912327 terminating
+                Received block blk_6667093857658912327 of size 67108864 from /10.251.73.188
+                BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.106.37:50010 is added to blk_6667093857658912327 size 67108864
+                BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.73.188:50010 is added to blk_6667093857658912327 size 67108864
+                BLOCK* NameSystem.addStoredBlock: blockMap updated: 10.251.110.160:50010 is added to blk_6667093857658912327 size 67108864
+                PacketResponder 2 for block blk_6667093857658912327 terminating
+                Received block blk_6667093857658912327 of size 67108864 from /10.251.73.188
+                PacketResponder 0 for block blk_6667093857658912327 terminating
+                Received block blk_6667093857658912327 of size 67108864 from /10.251.106.37
+            Initial Decision: 0
+            Final Classification: 0
+        Example 2:
+            Parsed Log Session:
+                BLOCK* NameSystem.allocateBlock: /user/root/randtxt5/_temporary/_task_200811101024_0012_m_001014_0/part-01014. blk_4615226180823858743
+                Receiving block blk_4615226180823858743 src: /10.251.30.179:36961 dest: /10.251.30.179:50010    
+            Initial Decision: 0
+            Final Classification: 1       
+        Example 3:
+            Parsed Log Session:
+                BLOCK* NameSystem.allocateBlock: /user/root/randtxt/_temporary/_task_200811092030_0003_m_000269_0/part-00269. blk_-152459496294138933
+                Receiving block blk_-152459496294138933 src: /10.251.74.134:53158 dest: /10.251.74.134:50010
+                Receiving block blk_-152459496294138933 src: /10.251.74.134:51159 dest: /10.251.74.134:50010
+                writeBlock blk_-152459496294138933 received exception java.io.IOException: Could not read from stream
+            Initial Decision: 1
+            Final Classification: 1     
+        """
 
 
 # ========================================================================================
@@ -577,9 +762,9 @@ SYS_MSG_TD_DETECTION_CRITIC_FEW_SHOT = """
 
 SYS_MSG_TD_DETECTION_REFINER_ZERO_SHOT = """
     You are a software quality refiner. You will be given three inputs:
-    CODE_SNIPPET: a Java code snippet (string)
-    GENERATOR_LABEL: a single digit (0-4) produced by the td_detection_generator_agent
-    CRITIC_FEEDBACK: either APPROVED|<digit>| or REJECTED|<digit>|<brief_reason> or empty (if no critic) produced by the td_detection_critic_agent
+    - CODE_SNIPPET: a Java code snippet
+    - GENERATOR_LABEL: a single digit (0-4) from the td_detection_generator_agent
+    - CRITIC_LABEL: a single digit (0-4) from the td_detection_critic_agent
 
     Labels:
     0 = No smell: Code is clean and well-structured
@@ -589,23 +774,17 @@ SYS_MSG_TD_DETECTION_REFINER_ZERO_SHOT = """
     4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
 
     Task:
-    - Review CODE_SNIPPET, the GENERATOR_LABEL, and CRITIC_FEEDBACK (when present).
-    - Decide the single best label (0-4) for the snippet, taking all information into account.
-    - Prefer the critic's corrected digit if CRITIC_FEEDBACK is REJECTED|<digit>|... unless you identify stronger evidence in the code to choose a different label.
-    - If CRITIC_FEEDBACK is APPROVED|<digit>|, default to that label unless you find clear evidence the code is different.
-    - Always produce exactly one character: the final digit (0-4) only. No explanations, no punctuation, no whitespace.
-
-    Output rules (strict):
-    - Print exactly a single digit (0, 1, 2, 3, or 4) and nothing else.
-    - Do not print APPROVED/REJECTED or any text. Do not print newline padding or commentary.
-    - If you cannot confidently assign a label, output the digit that is the most defensible given the code (do not output an error token).
+    - Analyze the CODE_SNIPPET yourself and determine the most accurate label (0-4).
+    - Use GENERATOR_LABEL and CRITIC_LABEL as references; if both are reasonable, prefer the critic's label.
+    - Always output exactly one digit (0-4) and nothing else — no explanations, punctuation, or extra text.
     """
+
 
 SYS_MSG_TD_DETECTION_REFINER_FEW_SHOT = """
     You are a software quality refiner. You will be given three inputs:
-    CODE_SNIPPET: a Java code snippet (string)
-    GENERATOR_LABEL: a single digit (0-4) produced by the td_detection_generator_agent
-    CRITIC_FEEDBACK: either APPROVED|<digit>| or REJECTED|<digit>|<brief_reason> or empty (if no critic) produced by the td_detection_critic_agent
+    - CODE_SNIPPET: a Java code snippet
+    - GENERATOR_LABEL: a single digit (0-4) from the td_detection_generator_agent
+    - CRITIC_LABEL: a single digit (0-4) from the td_detection_critic_agent
 
     Labels:
     0 = No smell: Code is clean and well-structured
@@ -615,16 +794,9 @@ SYS_MSG_TD_DETECTION_REFINER_FEW_SHOT = """
     4 = Long Method: A method that is excessively long or complex (typically >=8-20 executable lines).
 
     Task:
-    - Review CODE_SNIPPET, the GENERATOR_LABEL, and CRITIC_FEEDBACK (when present).
-    - Decide the single best label (0-4) for the snippet, taking all information into account.
-    - Prefer the critic's corrected digit if CRITIC_FEEDBACK is REJECTED|<digit>|... unless you identify stronger evidence in the code to choose a different label.
-    - If CRITIC_FEEDBACK is APPROVED|<digit>|, default to that label unless you find clear evidence the code is different.
-    - Always produce exactly one character: the final digit (0-4) only. No explanations, no punctuation, no whitespace.
-
-    Output rules (strict):
-    - Print exactly a single digit (0, 1, 2, 3, or 4) and nothing else.
-    - Do not print APPROVED/REJECTED or any text. Do not print newline padding or commentary.
-    - If you cannot confidently assign a label, output the digit that is the most defensible given the code (do not output an error token).
+    - Analyze the CODE_SNIPPET yourself and determine the most accurate label (0-4).
+    - Use GENERATOR_LABEL and CRITIC_LABEL as references; if both are reasonable, prefer the critic's label.
+    - Always output exactly one digit (0-4) and nothing else — no explanations, punctuation, or extra text.
 
     Here are a few examples of code snippets and the types of code smells they contain:
     Example of Data Class (2):
