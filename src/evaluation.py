@@ -4,6 +4,7 @@ from difflib import SequenceMatcher
 import pandas as pd
 import config
 import os
+import evaluate
 from debt_utils import map_ground_truth_label
 
 def load_ground_truth(file_path):
@@ -236,3 +237,57 @@ def evaluate_and_save_td(normalize_fn, ground_truth, raw_preds, exp_name, result
         "TN": results["TN"],
         "FN": results["FN"]
     }
+
+def evaluate_and_save_log_analysis(gt, normalized_results, exp_name, result_dir):
+    """
+    Compute evaluation metrics (TP, FP, TN, FN, Precision, Recall, F1, Accuracy) and save the summary as CSV.
+    """
+    # Match predictions to ground truth
+    y_true, y_pred, matched_blocks = [], [], []
+    for item in normalized_results:
+        blk = item["block_id"]
+        pred = item["normalized"]
+        if blk in gt:
+            y_true.append(int(gt[blk]))
+            y_pred.append(int(pred))
+            matched_blocks.append(blk)
+
+    # --- Load metrics from evaluate ---
+    accuracy_metric = evaluate.load("accuracy")
+    precision_metric = evaluate.load("precision")
+    recall_metric = evaluate.load("recall")
+    f1_metric = evaluate.load("f1")
+
+    # --- Compute metrics ---
+    accuracy = accuracy_metric.compute(references=y_true, predictions=y_pred)["accuracy"]
+    precision = precision_metric.compute(references=y_true, predictions=y_pred, average="binary")["precision"]
+    recall = recall_metric.compute(references=y_true, predictions=y_pred, average="binary")["recall"]
+    f1 = f1_metric.compute(references=y_true, predictions=y_pred, average="binary")["f1"]
+
+    # --- Compute TP, FP, TN, FN manually ---
+    TP = sum((yt == 1 and yp == 1) for yt, yp in zip(y_true, y_pred))
+    TN = sum((yt == 0 and yp == 0) for yt, yp in zip(y_true, y_pred))
+    FP = sum((yt == 0 and yp == 1) for yt, yp in zip(y_true, y_pred))
+    FN = sum((yt == 1 and yp == 0) for yt, yp in zip(y_true, y_pred))
+
+    # --- Save summary ---
+    summary = {
+        "TP": TP, "FP": FP, "TN": TN, "FN": FN,
+        "Precision": round(precision, 4),
+        "Recall": round(recall, 4),
+        "F1": round(f1, 4),
+        "Accuracy": round(accuracy, 4)
+    }
+
+    os.makedirs(result_dir, exist_ok=True)
+    summary_path = os.path.join(result_dir, f"{exp_name}_evaluation_summary.csv")
+    pd.DataFrame([summary]).to_csv(summary_path, index=False)
+
+    # --- Print summary ---
+    print("\n=== Log Anomaly Detection Evaluation ===")
+    print(f"Accuracy: {accuracy:.2%}")
+    print(f"Precision: {precision:.2%}, Recall: {recall:.2%}, F1: {f1:.2%}")
+    print(f"TP: {TP}, FP: {FP}, TN: {TN}, FN: {FN}")
+    print("========================================\n")
+
+    return summary
