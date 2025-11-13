@@ -142,7 +142,7 @@ Multi Agent Usage
 ```
 python script/multi_agent_code_generation.py --prompt_type few_shot
 python script/multi_agent_code_generation.py --prompt_type zero_shot
-
+```
 
 ## How to run Log Parsing experiments
 
@@ -164,6 +164,37 @@ python src/two_agent_log_parsing.py --shot zero --input HDFS_385_sampled.log --g
 python src/two_agent_log_parsing.py --shot few --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv  # run with few-shot
 ```
 
+Multi-agent Usage:
+```
+python src/multi_agent_log_parsing.py --shot zero --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv   # run with zero-shot
+python src/multi_agent_log_parsing.py --shot few --input HDFS_385_sampled.log --gt HDFS_385_sampled_log_structured_corrected.csv  # run with few-shot
+```
+## How to run Log Analysis experiments
+
+Non-agentic Usage:
+```
+python src/no_agents_log_analysis.py --shot zero --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv   # run with zero-shot
+python src/no_agents_log_analysis.py --shot few --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv  # run with few-shot
+```
+
+Single-agent Usage:
+```
+python src/single_agent_log_analysis.py --shot zero --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv   # run with zero-shot
+python src/single_agent_log_analysis.py --shot few --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv  # run with few-shot
+```
+
+Dual-agent Usage:
+```
+python src/two_agent_log_analysis.py --shot zero --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv   # run with zero-shot
+python src/two_agent_log_analysis.py --shot few --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv  # run with few-shot
+```
+
+Multi-agent Usage:
+```
+python src/multi_agent_log_analysis.py --shot zero --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv   # run with zero-shot
+python src/multi_agent_log_analysis.py --shot few --input HDFS_385_sampled_sessions --gt HDFS_anomaly_label_385_session_sampled.csv  # run with few-shot
+```
+
 ## How to run Technical Debt Detection experiments
 Non-agentic Usage:
 ```
@@ -183,6 +214,11 @@ python src/two_agent_td_detection.py --shot zero --input mlcq_cleaned_and_pruned
 python src/two_agent_td_detection.py --shot few --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with few-shot
 ```
 
+Dual-agent Usage:
+```
+python src/multi_agent_td_detection.py --shot zero --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with zero-shot
+python src/multi_agent_td_detection.py --shot few --input mlcq_cleaned_and_pruned_dataset_385.csv --gt mlcq_cleaned_and_pruned_dataset_385.csv  # run with few-shot
+```
 
 Common CLI flags
 - `--input` (default from `config.IN_FILE`) — filename located inside `data/`.
