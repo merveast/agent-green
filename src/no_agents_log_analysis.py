@@ -37,7 +37,7 @@ def run_inference_with_emissions_log_analysis(log_sessions, model_name, sys_prom
             print(f"Processing {blk_id} ({i+1}/{len(log_sessions)})")
             prompt = sys_prompt + content
             response = ask_ollama(model_name, prompt)
-            print(f"Response: {response}")
+            #print(f"Response: {response}")
             if response:
                 log_anomaly_results.append({
                     "block_id": blk_id,
@@ -56,7 +56,7 @@ def parse_args():
     p.add_argument("--input", default="HDFS_385_sampled_sessions", help="Input sessions directory name (in config.DATA_DIR)")
     p.add_argument("--gt", default="HDFS_anomaly_label_385_session_sampled.csv", help="Ground-truth file name (in config.DATA_DIR)")
     p.add_argument("--result-dir", default=config.RESULT_DIR, help="Directory to store results")
-    p.add_argument("--design", default=None, help="Experiment design name (prefixes allowed: NA-, S-, DA-, MA-). If omitted, NA-{shot} will be used.")
+    p.add_argument("--design", default=None, help="Experiment design name (prefixes allowed: NA-, SA-, DA-, MA-). If omitted, NA-{shot} will be used.")
     p.add_argument("--shot", default="few", choices=["zero", "few"], help="zero or few shot prompt selection")
     return p.parse_args()
 
