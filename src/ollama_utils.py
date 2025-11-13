@@ -11,7 +11,8 @@ def ask_ollama(model, prompt, temperature=0):
         response = ollama.generate(
             model=model,
             prompt=prompt,
-            options={'temperature': temperature},
+            options={'temperature': temperature,
+                     'num_ctx':262144},
             think = False
         )
     except ollama.ResponseError as e:
