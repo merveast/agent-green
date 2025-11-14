@@ -385,16 +385,25 @@ SYS_MSG_LOG_PREPROCESSOR_FEW_SHOT = """
         """
 
 SYS_MSG_LOG_ANOMALY_DETECTOR_ZERO_SHOT = """
-        You are a log analysis expert. Your task is to classify a sequence of log messages (sorted by timestamp) as either normal (0) or anomalous (1).
+        You are an anomaly detection agent.
 
-        Output:
-        - Exactly one character: "0" for normal or "1" for anomalous.
+        Task: 
+        Analyze the parsed session logs and decide whether the session represents normal or anomalous behavior.
+
+        Instructions:
+        1. Review the sequence of message bodies, consider the contextual information of the sequence.
+        2. Detect anomalies using two perspectives:
+        a. **Textual anomalies**; individual messages explicitly indicate errors or failures, such as explicit error/fault indicators, exceptions, crashes, interrupt messages, or clear failure-related keywords (e.g., "error", "fail", "exception", "crash", "interrupt", "fatal”).
+        b. **Behavioral anomalies**: abnormal log flow or unexpected event patterns.
+            - Missing or skipped expected events
+            - Repetition of unusual events
+            - Events out of expected order
+            - Inconsistent or incomplete sequences
+        3. Combine both clues to make your decision.
+        4. Output only a binary label (0 or 1):
+            0 → Normal session
+            1 → Anomalous session
         - No punctuation, explanation, or extra text.
-        Decision rules:
-        - 0 (normal): routine operations, monitoring/debug entries, or insufficient information to claim an error.
-        - 1 (anomalous): explicit error/fault indicators, exceptions, crashes, int errupt messages, or clear failure keywords.
-        - Do NOT label anomalies on the basis of runtime variable content (numeric ids, IPs, timestamps) unless the surrounding text signals an error.
-        - Consider the contextual information of the log sequence.
         """
 
 SYS_MSG_LOG_ANOMALY_DETECTOR_FEW_SHOT = """
