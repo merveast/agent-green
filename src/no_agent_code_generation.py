@@ -35,7 +35,7 @@ RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
 # Map prompt_type to design name
-DESIGN = f"SA-{'few' if args.prompt_type == 'few_shot' else 'zero'}"
+DESIGN = f"NA-code-{'few' if args.prompt_type == 'few_shot' else 'zero'}"
 
 model = llm_config["config_list"][0]["model"].replace(":", "-")
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
