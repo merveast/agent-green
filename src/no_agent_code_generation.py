@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+# ================================================================
+# No-Agent Code Generation (Zero-Shot and Few-Shot)
+# ================================================================
+
+#!/usr/bin/env python3
 import os
 import json
 import time
@@ -5,16 +11,14 @@ import config
 import sys
 import subprocess
 import argparse
+import ollama
 from datetime import datetime
-from autogen import AssistantAgent
 from codecarbon import OfflineEmissionsTracker
-from ollama_utils import start_ollama_server,stop_ollama_server
+from ollama_utils import start_ollama_server, stop_ollama_server
 
 # --- Parse Command Line Arguments ---
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Single Agent Code Generation")
-    
-    # Add prompt_type argument
+    parser = argparse.ArgumentParser(description="No-Agent Code Generation")
     parser.add_argument(
         "--prompt_type",
         type=str,
@@ -22,10 +26,8 @@ def parse_arguments():
         default="zero_shot",
         help="Prompt type: zero_shot or few_shot (default: zero_shot)"
     )
-    
     return parser.parse_args()
 
-# Parse arguments
 args = parse_arguments()
 
 # --- Configuration ---
@@ -34,26 +36,29 @@ DATASET_FILE = config.HUMANEVAL_DATASET
 RESULT_DIR = config.RESULT_DIR
 os.makedirs(RESULT_DIR, exist_ok=True)
 
-# Map prompt_type to design name
 DESIGN = f"NA-code-{'few' if args.prompt_type == 'few_shot' else 'zero'}"
 
-model = llm_config["config_list"][0]["model"].replace(":", "-")
+model = llm_config["config_list"][0]["model"]
+temperature = llm_config.get("temperature", 0.0)
 timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 exp_name = f"{DESIGN}_{model}_{timestamp}"
 
-# --- Agent Creation ---
-def create_code_generator_agent(llm_config, sys_prompt):
-    return AssistantAgent(
-        name="code_generator_agent",
-        system_message=sys_prompt,
-        description="Generate Python code solutions.",
-        llm_config=llm_config,
-        human_input_mode="NEVER",
-    )
+# --- Direct Ollama Query ---
+def query_ollama(model, prompt):
+    """Query Ollama model directly without agent framework"""
+    try:
+        response = ollama.generate(
+            model=model, 
+            prompt=prompt, 
+            options={"temperature": temperature}
+        )
+        return response.get("response", None)
+    except Exception as e:
+        print(f"Error querying Ollama: {e}")
+        return None
 
 # --- Data Reading ---
 def read_code_generation_data(dataset_path):
-    """Read code generation data from JSONL file"""
     code_problems = []
     with open(dataset_path, 'r') as f:
         for line in f:
@@ -61,7 +66,6 @@ def read_code_generation_data(dataset_path):
             code_problems.append(data)
     return code_problems
 
-# Read dataset
 print(f"Reading dataset from: {DATASET_FILE}")
 code_samples = read_code_generation_data(DATASET_FILE)
 print(f"Loaded {len(code_samples)} code samples")
@@ -111,11 +115,8 @@ def extract_code_from_response(response_text):
     
     return response_text.strip()
 
-# --- With CodeCarbon Emissions Tracking ---
-def run_inference_with_emissions(code_samples, llm_config, sys_prompt, task, exp_name, result_dir):
-    """Run code generation with emissions tracking and incremental saving"""
-    
-    # Create the output file path
+# --- Inference with Emissions Tracking ---
+def run_inference_with_emissions(code_samples, model_name, sys_prompt, task, exp_name, result_dir):
     detailed_file = os.path.join(result_dir, f"{exp_name}_detailed_results.jsonl")
     
     tracker = OfflineEmissionsTracker(
@@ -127,18 +128,16 @@ def run_inference_with_emissions(code_samples, llm_config, sys_prompt, task, exp
     tracker.start()
     
     try:
-        code_generator = create_code_generator_agent(llm_config, sys_prompt)
-        
         for i, sample in enumerate(code_samples):
             print(f"Processing sample {i+1}/{len(code_samples)} (task_id: {sample.get('task_id', i)})")
             
-            # Format task with prompt
             problem_prompt = sample.get('prompt', sample.get('description', ''))
             content = task.format(prompt=problem_prompt)
             
-            res = code_generator.generate_reply(messages=[{"content": content, "role": "user"}])
+            # Direct Ollama call without agent
+            formatted_prompt = sys_prompt + "\n\n" + content
+            response_text = query_ollama(model_name, formatted_prompt)
             
-            # Store result with full sample information
             result = {
                 'task_id': sample.get('task_id', ''),
                 'prompt': problem_prompt,
@@ -147,19 +146,16 @@ def run_inference_with_emissions(code_samples, llm_config, sys_prompt, task, exp
                 'test': sample.get('test', '')
             }
             
-            if res is not None and "content" in res:
-                response_text = res["content"].strip()
+            if response_text:
                 generated_code = extract_code_from_response(response_text)
                 result['generated_solution'] = generated_code
             else:
                 result['generated_solution'] = ""
                 print(f"[Warning] Skipped sample {i} — no response or invalid format.")
             
-            # Save immediately after each sample (append mode)
             with open(detailed_file, 'a') as f:
                 f.write(json.dumps(result) + '\n')
             
-            # Progress indicator
             if (i + 1) % 10 == 0:
                 print(f"Progress saved: {i + 1}/{len(code_samples)} samples completed")
                 
@@ -170,67 +166,74 @@ def run_inference_with_emissions(code_samples, llm_config, sys_prompt, task, exp
     return detailed_file
 
 # --- Main Execution ---
-time.sleep(1)  # Brief initialization pause
-
-# Select system prompt based on prompt type
-if args.prompt_type == "few_shot":
-    sys_prompt = config.SYS_MSG_CODE_GENERATOR_FEW_SHOT
-    print("Using few-shot system prompt")
-else:  # zero_shot
-    sys_prompt = config.SYS_MSG_CODE_GENERATOR_ZERO_SHOT
-    print("Using zero-shot system prompt")
-
-print(f"Running {DESIGN} code generation...")
-print("Starting Ollama server...")
-proc = start_ollama_server()
-time.sleep(5)    
-try:    
-    detailed_file = run_inference_with_emissions(
-        code_samples, 
-        llm_config, 
-        sys_prompt, 
-        config.SINGLE_AGENT_TASK_CODE_GENERATION, 
-        exp_name, 
-        RESULT_DIR
-    )
-except Exception as e:
+def main():
+    time.sleep(1)
+    
+    if args.prompt_type == "few_shot":
+        sys_prompt = config.SYS_MSG_CODE_GENERATOR_FEW_SHOT
+        print("Using few-shot system prompt")
+    else:
+        sys_prompt = config.SYS_MSG_CODE_GENERATOR_ZERO_SHOT
+        print("Using zero-shot system prompt")
+    
+    print(f"\nRunning {DESIGN} code generation (direct model inference)...")
+    print(f"Model: {model}")
+    print(f"Temperature: {temperature}")
+    print(f"Experiment: {exp_name}")
+    
+    print("Starting Ollama server...")
+    proc = start_ollama_server()
+    time.sleep(5)
+    
+    try:
+        detailed_file = run_inference_with_emissions(
+            code_samples, 
+            model, 
+            sys_prompt, 
+            config.SINGLE_AGENT_TASK_CODE_GENERATION, 
+            exp_name, 
+            RESULT_DIR
+        )
+    except Exception as e:
         print(f"Error during inference: {e}")
-finally:
+        detailed_file = None
+    finally:
         print("Stopping Ollama server...")
         stop_ollama_server(proc)
-
-print(f"\nCode generation completed for experiment: {exp_name}")
-print(f"Total samples processed: {len(code_samples)}")
-print(f"Results saved to: {detailed_file}")
-
-# --- Call Evaluation Script ---
-print("\n" + "="*80)
-print("STARTING EVALUATION")
-print("="*80)
-
-try:
-    # Call the evaluation script with the results file
-    eval_result = subprocess.run(
-        ["python", "src/evaluate_code_generation.py", detailed_file],
-        capture_output=True,
-        text=True
-    )
     
-    print(eval_result.stdout)
-    
-    if eval_result.returncode != 0:
-        print("Evaluation encountered an error:")
-        print(eval_result.stderr)
-    else:
+    if detailed_file:
+        print(f"\nCode generation completed for experiment: {exp_name}")
+        print(f"Total samples processed: {len(code_samples)}")
+        print(f"Results saved to: {detailed_file}")
+        
+        # --- Call Evaluation Script ---
         print("\n" + "="*80)
-        print("EVALUATION COMPLETED SUCCESSFULLY")
+        print("STARTING EVALUATION")
         print("="*80)
         
-except Exception as e:
-    print(f"Failed to run evaluation: {e}")
-    print("You can manually evaluate by running:")
-    print(f"python evaluate_code_generation.py {detailed_file}")
-    
-    
-    
-    
+        try:
+            eval_result = subprocess.run(
+                ["python", "src/evaluate_code_generation.py", detailed_file],
+                capture_output=True,
+                text=True
+            )
+            
+            print(eval_result.stdout)
+            
+            if eval_result.returncode != 0:
+                print("Evaluation encountered an error:")
+                print(eval_result.stderr)
+            else:
+                print("\n" + "="*80)
+                print("EVALUATION COMPLETED SUCCESSFULLY")
+                print("="*80)
+                
+        except Exception as e:
+            print(f"Failed to run evaluation: {e}")
+            print("You can manually evaluate by running:")
+            print(f"python src/evaluate_code_generation.py {detailed_file}")
+    else:
+        print("\nCode generation failed - no results to evaluate")
+
+if __name__ == "__main__":
+    main()
